@@ -53,7 +53,13 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger) http
 		r.Post("/auth/request-code", authHandler.RequestCode)
 		r.Post("/auth/verify-code", authHandler.VerifyCode)
 
+		adminAuthHandler := handler.NewAdminAuth(cfg)
+		r.Post("/admin/login", adminAuthHandler.Login)
+		r.Post("/admin/logout", adminAuthHandler.Logout)
+
 		r.Route("/admin", func(r chi.Router) {
+			r.Use(customMiddleware.RequireAdminAuth(cfg))
+			
 			r.Get("/doctors", doctorsHandler.ListAll)
 			r.Post("/doctors", doctorsHandler.Create)
 			r.Put("/doctors/{id}", doctorsHandler.Update)
