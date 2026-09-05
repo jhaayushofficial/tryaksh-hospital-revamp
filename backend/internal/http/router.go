@@ -34,6 +34,13 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger) http
 		
 		r.Get("/doctors", doctorsHandler.ListActive)
 		r.Get("/doctors/{slug}", doctorsHandler.GetBySlug)
+		
+		appointmentsHandler := handler.NewAppointments(pool)
+		r.Get("/slots", appointmentsHandler.GetSlots)
+		r.Post("/appointments", appointmentsHandler.Book)
+		r.Get("/appointments/{reference}", appointmentsHandler.GetByReference)
+		r.Delete("/appointments/{reference}", appointmentsHandler.Cancel)
+
 		r.Get("/locations", clinicsHandler.ListActive)
 		r.Get("/locations/{slug}", clinicsHandler.GetBySlug)
 
