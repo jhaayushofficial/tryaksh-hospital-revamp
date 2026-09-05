@@ -227,3 +227,49 @@ func (q *Queries) ListAppointments(ctx context.Context, arg ListAppointmentsPara
 	return items, nil
 }
 
+const listPatientAppointments = `-- name: ListPatientAppointments :many
+SELECT id, reference, doctor_id, clinic_id, appointment_date, start_time, end_time, patient_name, patient_phone, patient_email, patient_note, is_block, status, cancelled_by, cancelled_reason, rescheduled_from, idempotency_key, actor_doctor_id, created_at, updated_at FROM appointments
+WHERE patient_phone = $1
+ORDER BY appointment_date DESC, start_time DESC
+`
+
+func (q *Queries) ListPatientAppointments(ctx context.Context, patientPhone string) ([]Appointment, error) {
+	rows, err := q.db().Query(ctx, listPatientAppointments, patientPhone)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Appointment
+	for rows.Next() {
+		var i Appointment
+		if err := rows.Scan(
+			&i.ID,
+			&i.Reference,
+			&i.DoctorID,
+			&i.ClinicID,
+			&i.AppointmentDate,
+			&i.StartTime,
+			&i.EndTime,
+			&i.PatientName,
+			&i.PatientPhone,
+			&i.PatientEmail,
+			&i.PatientNote,
+			&i.IsBlock,
+			&i.Status,
+			&i.CancelledBy,
+			&i.CancelledReason,
+			&i.RescheduledFrom,
+			&i.IdempotencyKey,
+			&i.ActorDoctorID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

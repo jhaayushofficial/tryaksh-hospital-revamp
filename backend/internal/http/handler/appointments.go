@@ -226,3 +226,24 @@ func (h *Appointments) Cancel(w http.ResponseWriter, r *http.Request) {
 
 	response.JSON(w, http.StatusOK, updated)
 }
+
+func (h *Appointments) ListMyAppointments(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	authPhone, ok := ctx.Value(middleware.PatientPhoneKey).(string)
+	if !ok || authPhone == "" {
+		response.Unauthorized(w, "patient phone not found in authenticated context")
+		return
+	}
+
+	apps, err := h.q.ListPatientAppointments(ctx, authPhone)
+	if err != nil {
+		response.InternalServerError(w, r, err)
+		return
+	}
+
+	if apps == nil {
+		apps = []db.Appointment{}
+	}
+
+	response.JSON(w, http.StatusOK, apps)
+}

@@ -40,6 +40,7 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger) http
 
 		r.Group(func(r chi.Router) {
 			r.Use(customMiddleware.RequirePatientAuth(pool))
+			r.Get("/appointments", appointmentsHandler.ListMyAppointments)
 			r.Post("/appointments", appointmentsHandler.Book)
 			r.Get("/appointments/{reference}", appointmentsHandler.GetByReference)
 			r.Delete("/appointments/{reference}", appointmentsHandler.Cancel)
