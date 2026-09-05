@@ -364,29 +364,38 @@ function BookingDetails({ onBack, doctor, clinicId, date, slotStart, slotEnd }: 
   );
 }
 
+import Admin from "./Admin";
+
 export default function App() {
   return (
     <BrowserRouter>
-      <div className="font-ibm bg-paper min-h-screen flex flex-col">
-        <header className="bg-navy px-5 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Logo size={44} />
-            <div>
-              <div className="font-lora text-white text-lg leading-tight">Tryaksh Hospital</div>
-              <div className="text-[#B9C2D9] text-xs">&amp; Diagnostics · Darbhanga</div>
-            </div>
-          </div>
-          <a href="tel:+919229333922" className="bg-red text-white flex items-center gap-1.5 text-sm px-3 py-1.5 rounded">
-            <Phone size={14} /> <span className="hidden sm:inline">922 9333 922</span>
-          </a>
-        </header>
-
-        <div className="flex-1">
-          <Routes>
-            <Route path="/*" element={<BookingWizard />} />
-          </Routes>
-        </div>
-      </div>
+      <Routes>
+        <Route path="/admin/*" element={<Admin />} />
+        <Route path="/*" element={<PublicLayout />} />
+      </Routes>
     </BrowserRouter>
+  );
+}
+
+function PublicLayout() {
+  return (
+    <div className="font-ibm bg-paper min-h-screen flex flex-col">
+      <header className="bg-navy px-5 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Logo size={44} />
+          <div>
+            <div className="font-lora text-white text-lg leading-tight">Tryaksh Hospital</div>
+            <div className="text-[#B9C2D9] text-xs">&amp; Diagnostics · Darbhanga</div>
+          </div>
+        </div>
+        <a href="tel:+919229333922" className="bg-red text-white flex items-center gap-1.5 text-sm px-3 py-1.5 rounded">
+          <Phone size={14} /> <span className="hidden sm:inline">922 9333 922</span>
+        </a>
+      </header>
+
+      <div className="flex-1">
+        <BookingWizard />
+      </div>
+    </div>
   );
 }
