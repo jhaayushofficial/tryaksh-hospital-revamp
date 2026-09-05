@@ -128,9 +128,18 @@ function BookingWizard() {
         <div className="space-y-3">
           {doctors.map((d) => (
             <div key={d.id} className="flex items-center justify-between gap-4 p-4 rounded bg-white border border-[#E4E2D9]">
-              <div>
-                <div className="text-navy font-medium">{d.name}</div>
-                <div className="text-red-deep text-sm mt-1">{d.specialization}</div>
+              <div className="flex items-center gap-4">
+                {d.photo_url ? (
+                  <img src={d.photo_url} alt={d.name} className="w-14 h-14 rounded-full object-cover border border-[#E4E2D9]" />
+                ) : (
+                  <div className="w-14 h-14 rounded-full bg-[#F1F0EA] flex items-center justify-center text-navy font-medium text-lg border border-[#E4E2D9]">
+                    {d.name.replace(/^Dr\.\s*/i, '').substring(0, 1)}
+                  </div>
+                )}
+                <div>
+                  <div className="text-navy font-medium">{d.name}</div>
+                  <div className="text-red-deep text-sm mt-1">{d.specialization}</div>
+                </div>
               </div>
               <button
                 onClick={() => goTo("clinic", { doctor: d.id })}

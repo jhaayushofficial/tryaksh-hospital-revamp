@@ -82,3 +82,15 @@ export async function updateAppointmentStatus(id: string, status: string, reason
     body: JSON.stringify({ status, reason }),
   });
 }
+
+export async function fetchDoctorClinic(doctorId: string, clinicId: string) {
+  return fetchAdmin(`/doctor-clinics/${doctorId}/${clinicId}`);
+}
+
+export async function updateDoctorClinicHours(doctorId: string, clinicId: string, defaultHours: any) {
+  return fetchAdmin(`/doctor-clinics/${doctorId}/${clinicId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ default_hours: defaultHours }),
+  });
+}

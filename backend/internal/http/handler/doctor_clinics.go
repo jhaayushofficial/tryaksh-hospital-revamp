@@ -38,6 +38,36 @@ func (h *DoctorClinics) Link(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusCreated, map[string]string{"status": "linked"})
 }
 
+func (h *DoctorClinics) Get(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	doctorIDStr := chi.URLParam(r, "doctor_id")
+	clinicIDStr := chi.URLParam(r, "clinic_id")
+
+	doctorID, err := uuid.Parse(doctorIDStr)
+	if err != nil {
+		response.BadRequest(w, "invalid doctor id")
+		return
+	}
+	clinicID, err := uuid.Parse(clinicIDStr)
+	if err != nil {
+		response.BadRequest(w, "invalid clinic id")
+		return
+	}
+
+	dc, err := h.q.GetDoctorClinic(ctx, doctorID, clinicID)
+	if err != nil {
+		if err.Error() == "no rows in result set" {
+			// Not an error, just means they aren't linked yet. Return empty/404.
+			response.NotFound(w, "doctor-clinic link not found")
+			return
+		}
+		response.InternalServerError(w, r, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, dc)
+}
+
 func (h *DoctorClinics) UpdateHours(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	doctorIDStr := chi.URLParam(r, "doctor_id")

@@ -68,6 +68,7 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger) http
 			r.Post("/clinics", clinicsHandler.Create)
 			r.Put("/clinics/{id}", clinicsHandler.Update)
 
+			r.Get("/doctor-clinics/{doctor_id}/{clinic_id}", doctorClinicsHandler.Get)
 			r.Post("/doctor-clinics", doctorClinicsHandler.Link)
 			r.Put("/doctor-clinics/{doctor_id}/{clinic_id}", doctorClinicsHandler.UpdateHours)
 			r.Delete("/doctor-clinics/{doctor_id}/{clinic_id}", doctorClinicsHandler.Unlink)

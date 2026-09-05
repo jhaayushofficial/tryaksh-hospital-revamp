@@ -57,22 +57,42 @@ func (h *Appointments) GetSlots(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert to domain blocks
+	// Convert to domain blocks, combining with the requested date
 	var blocks []availability.Block
 	for _, ab := range availBlocks {
+		// ab.StartTime is likely 0000-01-01 or 2000-01-01. Combine its hours/mins with 'date'
+		y, m, d := date.Date()
+		start := time.Date(y, m, d, ab.StartTime.Hour(), ab.StartTime.Minute(), 0, 0, date.Location())
+		end := time.Date(y, m, d, ab.EndTime.Hour(), ab.EndTime.Minute(), 0, 0, date.Location())
+
+		var bs, be *time.Time
+		if ab.BreakStart != nil && ab.BreakEnd != nil {
+			t1 := time.Date(y, m, d, ab.BreakStart.Hour(), ab.BreakStart.Minute(), 0, 0, date.Location())
+			t2 := time.Date(y, m, d, ab.BreakEnd.Hour(), ab.BreakEnd.Minute(), 0, 0, date.Location())
+			bs = &t1
+			be = &t2
+		}
+
 		blocks = append(blocks, availability.Block{
-			Start:      ab.StartTime,
-			End:        ab.EndTime,
-			BreakStart: ab.BreakStart,
-			BreakEnd:   ab.BreakEnd,
+			Start:      start,
+			End:        end,
+			BreakStart: bs,
+			BreakEnd:   be,
 		})
 	}
 
 	// 2. Fetch booked times
-	bookedTimes, err := h.q.GetBookedTimes(ctx, doctorID, clinicID, date)
+	bookedTimesRaw, err := h.q.GetBookedTimes(ctx, doctorID, clinicID, date)
 	if err != nil {
 		response.InternalServerError(w, r, err)
 		return
+	}
+	
+	// Combine booked times with the date as well
+	var bookedTimes []time.Time
+	y, m, d := date.Date()
+	for _, bt := range bookedTimesRaw {
+		bookedTimes = append(bookedTimes, time.Date(y, m, d, bt.Hour(), bt.Minute(), 0, 0, date.Location()))
 	}
 
 	// 3. Merge blocks
@@ -80,7 +100,38 @@ func (h *Appointments) GetSlots(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	merged := availability.MergeBlocks(blocks, bookedTimes, now, 60, 15)
 
-	response.JSON(w, http.StatusOK, merged)
+	type FrontendSlot struct {
+		Start  string `json:"start"`
+		End    string `json:"end"`
+		Status string `json:"status"`
+	}
+
+	var flatSlots []FrontendSlot
+	for _, b := range merged {
+		for _, s := range b.Slots {
+			// Convert status
+			status := "AVAILABLE"
+			if s.Status == availability.StatusBooked {
+				status = "BOOKED"
+			} else if s.Status == availability.StatusPast {
+				status = "PAST"
+			}
+			
+			flatSlots = append(flatSlots, FrontendSlot{
+				Start:  s.Time.Format("15:04"),
+				End:    s.Time.Add(15 * time.Minute).Format("15:04"),
+				Status: status,
+			})
+		}
+	}
+
+	if flatSlots == nil {
+		flatSlots = []FrontendSlot{}
+	}
+
+	response.JSON(w, http.StatusOK, map[string]interface{}{
+		"slots": flatSlots,
+	})
 }
 
 func generateReference() string {
@@ -99,8 +150,8 @@ func (h *Appointments) Book(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		DoctorID       uuid.UUID `json:"doctor_id"`
 		ClinicID       uuid.UUID `json:"clinic_id"`
-		Date           string    `json:"date"`
-		Time           string    `json:"time"`
+		Date           string    `json:"appointment_date"`
+		Time           string    `json:"start_time"`
 		PatientName    string    `json:"patient_name"`
 		PatientPhone   string    `json:"patient_phone"`
 		PatientEmail   *string   `json:"patient_email"`
