@@ -24,7 +24,7 @@ func NewAdminAppointments(pool *pgxpool.Pool) *AdminAppointments {
 
 func (h *AdminAppointments) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	
+
 	params := db.ListAppointmentsParams{}
 
 	if doctorID := r.URL.Query().Get("doctor_id"); doctorID != "" {

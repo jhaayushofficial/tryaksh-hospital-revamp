@@ -185,7 +185,7 @@ func TestMarkBooked(t *testing.T) {
 	booked := []time.Time{parse("10:15"), parse("10:45")}
 
 	got := MarkBooked(slots, booked)
-	
+
 	if got[0].Status != StatusAvailable {
 		t.Errorf("Expected 10:00 to be available")
 	}
@@ -213,7 +213,7 @@ func TestMergeBlocks(t *testing.T) {
 			End:   parse("17:00"),
 		},
 	}
-	
+
 	booked := []time.Time{parse("10:00"), parse("15:30")}
 	now := parse("09:30")
 	lead := 60 // cutoff is 10:30

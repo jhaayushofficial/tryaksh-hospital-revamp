@@ -327,7 +327,7 @@ func (h *Availability) BulkOpen(w http.ResponseWriter, r *http.Request) {
 		for _, b := range blocks {
 			start, _ := time.Parse("15:04", b.Start)
 			end, _ := time.Parse("15:04", b.End)
-			
+
 			var bs, be *time.Time
 			if b.BreakStart != "" && b.BreakEnd != "" {
 				bsParsed, _ := time.Parse("15:04", b.BreakStart)

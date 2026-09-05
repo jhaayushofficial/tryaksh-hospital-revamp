@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	
+
 	"github.com/tryaksh/clinic/backend/internal/config"
 	"github.com/tryaksh/clinic/backend/internal/http/handler"
 	customMiddleware "github.com/tryaksh/clinic/backend/internal/http/middleware"
@@ -31,10 +31,10 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger) http
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/config", handler.Config(cfg))
-		
+
 		r.Get("/doctors", doctorsHandler.ListActive)
 		r.Get("/doctors/{slug}", doctorsHandler.GetBySlug)
-		
+
 		appointmentsHandler := handler.NewAppointments(pool)
 		r.Get("/slots", appointmentsHandler.GetSlots)
 
@@ -59,7 +59,7 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger) http
 
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(customMiddleware.RequireAdminAuth(cfg))
-			
+
 			r.Get("/doctors", doctorsHandler.ListAll)
 			r.Post("/doctors", doctorsHandler.Create)
 			r.Put("/doctors/{id}", doctorsHandler.Update)

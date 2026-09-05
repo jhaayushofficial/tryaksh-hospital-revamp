@@ -36,7 +36,7 @@ func Logger(logger *slog.Logger) func(next http.Handler) http.Handler {
 			ctx := r.Context()
 
 			ww := &responseWriterObserver{ResponseWriter: w, status: http.StatusOK}
-			
+
 			next.ServeHTTP(ww, r.WithContext(ctx))
 
 			logger.InfoContext(ctx, "request completed",

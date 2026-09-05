@@ -26,7 +26,7 @@ func RemoveBreak(slots []Slot, breakStart, breakEnd time.Time, durationMinutes i
 
 	for _, slot := range slots {
 		slotEnd := slot.Time.Add(duration)
-		
+
 		// If slot is entirely before break OR entirely after break, keep it
 		if slotEnd.Before(breakStart) || slotEnd.Equal(breakStart) || slot.Time.After(breakEnd) || slot.Time.Equal(breakEnd) {
 			filtered = append(filtered, slot)
@@ -38,7 +38,7 @@ func RemoveBreak(slots []Slot, breakStart, breakEnd time.Time, durationMinutes i
 // MarkPast marks any slots that are before 'now + leadMinutes' as StatusPast.
 func MarkPast(slots []Slot, now time.Time, leadMinutes int) []Slot {
 	cutoff := now.Add(time.Duration(leadMinutes) * time.Minute)
-	
+
 	for i, slot := range slots {
 		if slot.Time.Before(cutoff) {
 			slots[i].Status = StatusPast

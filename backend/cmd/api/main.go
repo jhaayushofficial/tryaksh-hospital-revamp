@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tryaksh/clinic/backend/internal/config"
 	httpInternal "github.com/tryaksh/clinic/backend/internal/http"
+	"github.com/tryaksh/clinic/backend/internal/platform/cleanup"
 )
 
 func main() {
@@ -53,6 +54,9 @@ func main() {
 		logger.Error("database ping failed", "error", err)
 		os.Exit(1)
 	}
+
+	// Start background cleanup routines
+	cleanup.StartOTPCleanup(pool, 1*time.Hour)
 
 	router := httpInternal.NewRouter(cfg, pool, logger)
 

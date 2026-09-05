@@ -7,8 +7,6 @@ import (
 	"github.com/google/uuid"
 )
 
-
-
 const getBookedTimes = `-- name: GetBookedTimes :many
 SELECT start_time FROM appointments
 WHERE doctor_id = $1 AND clinic_id = $2 AND appointment_date = $3 AND status <> 'CANCELLED'
@@ -36,19 +34,19 @@ func (q *Queries) GetBookedTimes(ctx context.Context, doctorID uuid.UUID, clinic
 }
 
 type CreateAppointmentParams struct {
-	Reference       string     `json:"reference"`
-	DoctorID        uuid.UUID  `json:"doctor_id"`
-	ClinicID        uuid.UUID  `json:"clinic_id"`
-	AppointmentDate time.Time  `json:"appointment_date"`
-	StartTime       time.Time  `json:"start_time"`
-	EndTime         time.Time  `json:"end_time"`
-	PatientName     *string    `json:"patient_name,omitempty"`
-	PatientPhone    *string    `json:"patient_phone,omitempty"`
-	PatientEmail    *string    `json:"patient_email,omitempty"`
-	PatientNote     *string    `json:"patient_note,omitempty"`
-	IsBlock         bool       `json:"is_block"`
-	Status          string     `json:"status"`
-	IdempotencyKey  *string    `json:"idempotency_key,omitempty"`
+	Reference       string    `json:"reference"`
+	DoctorID        uuid.UUID `json:"doctor_id"`
+	ClinicID        uuid.UUID `json:"clinic_id"`
+	AppointmentDate time.Time `json:"appointment_date"`
+	StartTime       time.Time `json:"start_time"`
+	EndTime         time.Time `json:"end_time"`
+	PatientName     *string   `json:"patient_name,omitempty"`
+	PatientPhone    *string   `json:"patient_phone,omitempty"`
+	PatientEmail    *string   `json:"patient_email,omitempty"`
+	PatientNote     *string   `json:"patient_note,omitempty"`
+	IsBlock         bool      `json:"is_block"`
+	Status          string    `json:"status"`
+	IdempotencyKey  *string   `json:"idempotency_key,omitempty"`
 }
 
 const createAppointment = `-- name: CreateAppointment :one

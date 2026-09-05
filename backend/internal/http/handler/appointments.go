@@ -77,7 +77,7 @@ func (h *Appointments) GetSlots(w http.ResponseWriter, r *http.Request) {
 
 	// 3. Merge blocks
 	// Hardcoded: 15 mins appointment duration, 60 mins lead time (no booking within 60 mins)
-	now := time.Now() 
+	now := time.Now()
 	merged := availability.MergeBlocks(blocks, bookedTimes, now, 60, 15)
 
 	response.JSON(w, http.StatusOK, merged)
@@ -136,9 +136,9 @@ func (h *Appointments) Book(w http.ResponseWriter, r *http.Request) {
 	endTime := startTime.Add(15 * time.Minute)
 
 	// Note: We are relying on the database partial unique index (uniq_active_slot)
-	// to prevent double-booking. If it fails due to constraint violation, 
+	// to prevent double-booking. If it fails due to constraint violation,
 	// it will return a specific error code which we should ideally catch and translate.
-	
+
 	ref := generateReference()
 
 	app, err := h.q.CreateAppointment(ctx, db.CreateAppointmentParams{

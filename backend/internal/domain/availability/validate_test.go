@@ -24,53 +24,53 @@ func TestCheckOverlap(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "completely before",
-			new:  db.Availability{StartTime: parseTime("07:00"), EndTime: parseTime("08:00")},
+			name:    "completely before",
+			new:     db.Availability{StartTime: parseTime("07:00"), EndTime: parseTime("08:00")},
 			wantErr: false,
 		},
 		{
-			name: "completely after",
-			new:  db.Availability{StartTime: parseTime("18:00"), EndTime: parseTime("19:00")},
+			name:    "completely after",
+			new:     db.Availability{StartTime: parseTime("18:00"), EndTime: parseTime("19:00")},
 			wantErr: false,
 		},
 		{
-			name: "between blocks",
-			new:  db.Availability{StartTime: parseTime("13:00"), EndTime: parseTime("14:00")},
+			name:    "between blocks",
+			new:     db.Availability{StartTime: parseTime("13:00"), EndTime: parseTime("14:00")},
 			wantErr: false,
 		},
 		{
-			name: "exact overlap",
-			new:  db.Availability{StartTime: parseTime("09:00"), EndTime: parseTime("12:00")},
+			name:    "exact overlap",
+			new:     db.Availability{StartTime: parseTime("09:00"), EndTime: parseTime("12:00")},
 			wantErr: true,
 		},
 		{
-			name: "partial overlap start",
-			new:  db.Availability{StartTime: parseTime("08:30"), EndTime: parseTime("09:30")},
+			name:    "partial overlap start",
+			new:     db.Availability{StartTime: parseTime("08:30"), EndTime: parseTime("09:30")},
 			wantErr: true,
 		},
 		{
-			name: "partial overlap end",
-			new:  db.Availability{StartTime: parseTime("11:30"), EndTime: parseTime("12:30")},
+			name:    "partial overlap end",
+			new:     db.Availability{StartTime: parseTime("11:30"), EndTime: parseTime("12:30")},
 			wantErr: true,
 		},
 		{
-			name: "contained within",
-			new:  db.Availability{StartTime: parseTime("10:00"), EndTime: parseTime("11:00")},
+			name:    "contained within",
+			new:     db.Availability{StartTime: parseTime("10:00"), EndTime: parseTime("11:00")},
 			wantErr: true,
 		},
 		{
-			name: "contains existing block",
-			new:  db.Availability{StartTime: parseTime("08:00"), EndTime: parseTime("13:00")},
+			name:    "contains existing block",
+			new:     db.Availability{StartTime: parseTime("08:00"), EndTime: parseTime("13:00")},
 			wantErr: true,
 		},
 		{
-			name: "touching start boundary",
-			new:  db.Availability{StartTime: parseTime("08:00"), EndTime: parseTime("09:00")},
+			name:    "touching start boundary",
+			new:     db.Availability{StartTime: parseTime("08:00"), EndTime: parseTime("09:00")},
 			wantErr: false,
 		},
 		{
-			name: "touching end boundary",
-			new:  db.Availability{StartTime: parseTime("12:00"), EndTime: parseTime("13:00")},
+			name:    "touching end boundary",
+			new:     db.Availability{StartTime: parseTime("12:00"), EndTime: parseTime("13:00")},
 			wantErr: false,
 		},
 	}
