@@ -1,0 +1,20 @@
+# Tryaksh Clinic — Local Development Stack
+# Run: docker compose up -d
+# PostgreSQL will be available at localhost:5432
+
+services:
+  db:
+    image: postgres:17
+    container_name: tryaksh-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: dev
+      POSTGRES_DB: tryaksh
+    ports:
+      - "5432:5432"
+    volumes:
+      - tryaksh-db-data:/var/lib/postgresql/data
+
+volumes:
+  tryaksh-db-data:
