@@ -44,6 +44,10 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger) http
 		r.Get("/locations", clinicsHandler.ListActive)
 		r.Get("/locations/{slug}", clinicsHandler.GetBySlug)
 
+		authHandler := handler.NewAuth(pool)
+		r.Post("/auth/request-code", authHandler.RequestCode)
+		r.Post("/auth/verify-code", authHandler.VerifyCode)
+
 		r.Route("/admin", func(r chi.Router) {
 			r.Get("/doctors", doctorsHandler.ListAll)
 			r.Post("/doctors", doctorsHandler.Create)

@@ -82,10 +82,12 @@ type PhoneVerification struct {
 	ID             uuid.UUID `json:"id"`
 	Phone          string    `json:"phone"`
 	CodeHash       string    `json:"code_hash"`
+	Channel        string    `json:"channel"`
 	Attempts       int32     `json:"attempts"`
 	ExpiresAt      time.Time `json:"expires_at"`
 	VerifiedAt     *time.Time `json:"verified_at,omitempty"`
 	TokenHash      *string   `json:"token_hash,omitempty"`
 	TokenExpiresAt *time.Time `json:"token_expires_at,omitempty"`
+	Ip             *string   `json:"ip,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
 }
