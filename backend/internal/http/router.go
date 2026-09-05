@@ -70,6 +70,11 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger) http
 			r.Delete("/availability", availabilityHandler.DeleteDay)
 			r.Delete("/availability/{id}", availabilityHandler.DeleteBlock)
 			r.Post("/availability/bulk", availabilityHandler.BulkOpen)
+
+			adminAppsHandler := handler.NewAdminAppointments(pool)
+			r.Get("/appointments", adminAppsHandler.List)
+			r.Post("/appointments", adminAppsHandler.ForceBook)
+			r.Put("/appointments/{id}/status", adminAppsHandler.UpdateStatus)
 		})
 	})
 
