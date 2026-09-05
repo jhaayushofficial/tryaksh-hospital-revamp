@@ -27,6 +27,7 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger) http
 	doctorsHandler := handler.NewDoctors(pool)
 	clinicsHandler := handler.NewClinics(pool)
 	doctorClinicsHandler := handler.NewDoctorClinics(pool)
+	availabilityHandler := handler.NewAvailability(pool)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/config", handler.Config(cfg))
@@ -48,6 +49,12 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger) http
 			r.Post("/doctor-clinics", doctorClinicsHandler.Link)
 			r.Put("/doctor-clinics/{doctor_id}/{clinic_id}", doctorClinicsHandler.UpdateHours)
 			r.Delete("/doctor-clinics/{doctor_id}/{clinic_id}", doctorClinicsHandler.Unlink)
+
+			r.Get("/availability", availabilityHandler.ListRange)
+			r.Put("/availability", availabilityHandler.Upsert)
+			r.Delete("/availability", availabilityHandler.DeleteDay)
+			r.Delete("/availability/{id}", availabilityHandler.DeleteBlock)
+			r.Post("/availability/bulk", availabilityHandler.BulkOpen)
 		})
 	})
 
