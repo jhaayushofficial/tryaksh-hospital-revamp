@@ -24,8 +24,31 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger) http
 	r.Get("/healthz", handler.Healthz)
 	r.Get("/readyz", handler.Readyz(pool))
 
+	doctorsHandler := handler.NewDoctors(pool)
+	clinicsHandler := handler.NewClinics(pool)
+	doctorClinicsHandler := handler.NewDoctorClinics(pool)
+
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/config", handler.Config(cfg))
+		
+		r.Get("/doctors", doctorsHandler.ListActive)
+		r.Get("/doctors/{slug}", doctorsHandler.GetBySlug)
+		r.Get("/locations", clinicsHandler.ListActive)
+		r.Get("/locations/{slug}", clinicsHandler.GetBySlug)
+
+		r.Route("/admin", func(r chi.Router) {
+			r.Get("/doctors", doctorsHandler.ListAll)
+			r.Post("/doctors", doctorsHandler.Create)
+			r.Put("/doctors/{id}", doctorsHandler.Update)
+
+			r.Get("/clinics", clinicsHandler.ListAll)
+			r.Post("/clinics", clinicsHandler.Create)
+			r.Put("/clinics/{id}", clinicsHandler.Update)
+
+			r.Post("/doctor-clinics", doctorClinicsHandler.Link)
+			r.Put("/doctor-clinics/{doctor_id}/{clinic_id}", doctorClinicsHandler.UpdateHours)
+			r.Delete("/doctor-clinics/{doctor_id}/{clinic_id}", doctorClinicsHandler.Unlink)
+		})
 	})
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
