@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tryaksh/clinic/backend/internal/db"
 	"github.com/tryaksh/clinic/backend/internal/domain/availability"
+	"github.com/tryaksh/clinic/backend/internal/http/middleware"
 	"github.com/tryaksh/clinic/backend/internal/http/response"
 )
 
@@ -111,6 +112,14 @@ func (h *Appointments) Book(w http.ResponseWriter, r *http.Request) {
 		response.BadRequest(w, "invalid json payload")
 		return
 	}
+
+	authPhone, ok := ctx.Value(middleware.PatientPhoneKey).(string)
+	if !ok || authPhone == "" {
+		response.Unauthorized(w, "patient phone not found in authenticated context")
+		return
+	}
+	// Force the phone to be the one from the authenticated token
+	req.PatientPhone = authPhone
 
 	appDate, err := time.Parse("2006-01-02", req.Date)
 	if err != nil {

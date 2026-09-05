@@ -67,3 +67,13 @@ func Conflict(w http.ResponseWriter, message string) {
 		},
 	})
 }
+
+// Unauthorized sends a 401 error.
+func Unauthorized(w http.ResponseWriter, message string) {
+	JSON(w, http.StatusUnauthorized, JSONError{
+		Error: ErrorResponse{
+			Code:    "UNAUTHORIZED",
+			Message: message,
+		},
+	})
+}
