@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy: #0B1B3F;
+  --color-navy-deep: #081430;
+  --color-red: #C81E22;
+  --color-red-deep: #9A1518;
+  --color-paper: #F5F4EF;
+  --font-lora: 'Lora', serif;
+  --font-ibm: 'IBM Plex Sans', sans-serif;
+  --font-devanagari: 'Noto Sans Devanagari', sans-serif;
+}
+
+body {
+  font-family: var(--font-ibm);
+  background-color: var(--color-paper);
+}
