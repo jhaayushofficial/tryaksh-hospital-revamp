@@ -55,6 +55,9 @@ type Config struct {
 	MSG91SenderID      string `env:"MSG91_SENDER_ID"`
 	MSG91DLTTemplateID string `env:"MSG91_DLT_TEMPLATE_ID"`
 
+	// ── Firebase ────────────────────────────────────────────────────────────
+	FirebaseProjectID string `env:"FIREBASE_PROJECT_ID"`
+
 	// ── Clinic display ──────────────────────────────────────────────────────
 	ClinicName             string `env:"CLINIC_NAME"              envDefault:"Tryaksh Hospital and Diagnostics"`
 	ClinicTagline          string `env:"CLINIC_TAGLINE"           envDefault:"Trusted family healthcare in Darbhanga"`

@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/tryaksh/clinic/backend/internal/http/response"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/tryaksh/clinic/backend/internal/http/response"
 )
 
 func Healthz(w http.ResponseWriter, r *http.Request) {
