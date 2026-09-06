@@ -10,10 +10,11 @@ import (
 	"github.com/tryaksh/clinic/backend/internal/http/handler"
 	customMiddleware "github.com/tryaksh/clinic/backend/internal/http/middleware"
 	"github.com/tryaksh/clinic/backend/internal/http/response"
+	"github.com/tryaksh/clinic/backend/internal/platform/notify"
 	"log/slog"
 )
 
-func NewRouter(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger) http.Handler {
+func NewRouter(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger, notifier notify.Notifier) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(customMiddleware.RequestID)
@@ -35,7 +36,7 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger) http
 		r.Get("/doctors", doctorsHandler.ListActive)
 		r.Get("/doctors/{slug}", doctorsHandler.GetBySlug)
 
-		appointmentsHandler := handler.NewAppointments(pool)
+		appointmentsHandler := handler.NewAppointments(pool, cfg)
 		r.Get("/slots", appointmentsHandler.GetSlots)
 
 		r.Group(func(r chi.Router) {
@@ -49,9 +50,10 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger) http
 		r.Get("/locations", clinicsHandler.ListActive)
 		r.Get("/locations/{slug}", clinicsHandler.GetBySlug)
 
-		authHandler := handler.NewAuth(pool)
+		authHandler := handler.NewAuth(pool, notifier, cfg)
 		r.Post("/auth/request-code", authHandler.RequestCode)
 		r.Post("/auth/verify-code", authHandler.VerifyCode)
+		r.Post("/auth/firebase-login", authHandler.FirebaseLogin)
 
 		adminAuthHandler := handler.NewAdminAuth(cfg)
 		r.Post("/admin/login", adminAuthHandler.Login)
@@ -79,7 +81,7 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, logger *slog.Logger) http
 			r.Delete("/availability/{id}", availabilityHandler.DeleteBlock)
 			r.Post("/availability/bulk", availabilityHandler.BulkOpen)
 
-			adminAppsHandler := handler.NewAdminAppointments(pool)
+			adminAppsHandler := handler.NewAdminAppointments(pool, cfg)
 			r.Get("/appointments", adminAppsHandler.List)
 			r.Post("/appointments", adminAppsHandler.ForceBook)
 			r.Put("/appointments/{id}/status", adminAppsHandler.UpdateStatus)

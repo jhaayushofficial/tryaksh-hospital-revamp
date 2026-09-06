@@ -5,7 +5,7 @@ BEGIN;
 
 -- ── Doctors ────────────────────────────────────────────────────────────────────
 
-INSERT INTO doctors (id, slug, name, qualification, specialization, experience_years, bio)
+INSERT INTO doctors (id, slug, name, qualification, specialization, experience_years, bio, photo_url)
 VALUES
     (
         'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
@@ -14,7 +14,8 @@ VALUES
         'MBBS, MD',
         'General Medicine',
         15,
-        'Dr. Shankar Mishra is an experienced general physician providing trusted family healthcare in Darbhanga. He specialises in preventive care, chronic disease management, and patient-centred treatment.'
+        'Dr. Shankar Mishra is an experienced general physician providing trusted family healthcare in Darbhanga. He specialises in preventive care, chronic disease management, and patient-centred treatment.',
+        'https://res.cloudinary.com/w5nagizy/image/upload/v1788728756/Dr.ShankarMishra.png'
     ),
     (
         'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e',
@@ -23,7 +24,8 @@ VALUES
         'MBBS, MD',
         'General Medicine',
         10,
-        'Dr. Mahima Mishra is a dedicated physician with a focus on holistic patient care. She is known for her compassionate approach and thorough diagnostic practice in Darbhanga.'
+        'Dr. Mahima Mishra is a dedicated physician with a focus on holistic patient care. She is known for her compassionate approach and thorough diagnostic practice in Darbhanga.',
+        'https://res.cloudinary.com/w5nagizy/image/upload/v1788728744/Dr.MahimaMishra.png'
     );
 
 -- ── Clinics ────────────────────────────────────────────────────────────────────

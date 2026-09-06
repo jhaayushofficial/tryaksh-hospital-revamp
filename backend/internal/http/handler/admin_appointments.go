@@ -2,23 +2,29 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/tryaksh/clinic/backend/internal/config"
 	"github.com/tryaksh/clinic/backend/internal/db"
 	"github.com/tryaksh/clinic/backend/internal/http/response"
 )
 
 type AdminAppointments struct {
-	q *db.Queries
+	q   *db.Queries
+	cfg *config.Config
 }
 
-func NewAdminAppointments(pool *pgxpool.Pool) *AdminAppointments {
+func NewAdminAppointments(pool *pgxpool.Pool, cfg *config.Config) *AdminAppointments {
 	return &AdminAppointments{
-		q: db.New(pool),
+		q:   db.New(pool),
+		cfg: cfg,
 	}
 }
 
@@ -95,7 +101,7 @@ func (h *AdminAppointments) ForceBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	endTime := startTime.Add(15 * time.Minute)
+	endTime := startTime.Add(time.Duration(h.cfg.SlotDurationMinutes) * time.Minute)
 
 	ref := generateReference()
 
@@ -116,7 +122,8 @@ func (h *AdminAppointments) ForceBook(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		if err.Error() == "ERROR: duplicate key value violates unique constraint \"uniq_active_slot\" (SQLSTATE 23505)" {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			response.Conflict(w, "This slot is already booked")
 			return
 		}
@@ -154,7 +161,7 @@ func (h *AdminAppointments) UpdateStatus(w http.ResponseWriter, r *http.Request)
 
 	app, err := h.q.UpdateAppointmentStatus(ctx, id, req.Status, req.CancelledBy, req.CancelledReason)
 	if err != nil {
-		if err.Error() == "no rows in result set" {
+		if errors.Is(err, pgx.ErrNoRows) {
 			response.NotFound(w, "appointment not found")
 			return
 		}

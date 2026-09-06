@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:8080/api/v1";
+const API_BASE = (import.meta as any).env?.VITE_API_BASE || "http://localhost:8080/api/v1";
 
 // Simple wrapper to include token
 async function fetchAdmin(endpoint: string, options: RequestInit = {}) {
@@ -18,7 +18,7 @@ async function fetchAdmin(endpoint: string, options: RequestInit = {}) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || err.message || "Admin API error");
+    throw new Error(err.error?.message || err.error || err.message || "Admin API error");
   }
 
   // Handle empty responses (like DELETE)
@@ -92,5 +92,13 @@ export async function updateDoctorClinicHours(doctorId: string, clinicId: string
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ default_hours: defaultHours }),
+  });
+}
+
+export async function bulkGenerateAvailability(doctorId: string, clinicId: string, from: string, to: string) {
+  return fetchAdmin("/availability/bulk", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ doctor_id: doctorId, clinic_id: clinicId, from, to }),
   });
 }

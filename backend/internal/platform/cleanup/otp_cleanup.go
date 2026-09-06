@@ -17,7 +17,7 @@ func StartOTPCleanup(pool *pgxpool.Pool, interval time.Duration) {
 			ctx := context.Background()
 
 			// Delete OTPs older than 24 hours
-			query := `DELETE FROM auth_otp WHERE created_at < NOW() - INTERVAL '24 hours'`
+			query := `DELETE FROM phone_verifications WHERE created_at < NOW() - INTERVAL '24 hours'`
 			tag, err := pool.Exec(ctx, query)
 			if err != nil {
 				log.Printf("[Cleanup] Failed to delete expired OTPs: %v", err)

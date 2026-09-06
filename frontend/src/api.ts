@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:8080/api/v1";
+const API_BASE = (import.meta as any).env?.VITE_API_BASE || "http://localhost:8080/api/v1";
 
 export async function fetchDoctors() {
   const res = await fetch(`${API_BASE}/doctors`);
@@ -36,7 +36,20 @@ export async function verifyOTP(phone: string, code: string) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || "Failed to verify OTP");
+    throw new Error(err.error?.message || err.error || "Failed to verify OTP");
+  }
+  return res.json();
+}
+
+export async function firebaseLogin(idToken: string) {
+  const res = await fetch(`${API_BASE}/auth/firebase-login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idToken }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || err.error || "Failed to login with Firebase");
   }
   return res.json();
 }
@@ -64,7 +77,7 @@ export async function bookAppointment(data: {
   
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || "Failed to book appointment");
+    throw new Error(err.error?.message || err.error || "Failed to book appointment");
   }
   return res.json();
 }

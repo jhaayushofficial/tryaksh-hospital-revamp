@@ -3,13 +3,17 @@ package handler
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"math/big"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/tryaksh/clinic/backend/internal/config"
 	"github.com/tryaksh/clinic/backend/internal/db"
 	"github.com/tryaksh/clinic/backend/internal/domain/availability"
 	"github.com/tryaksh/clinic/backend/internal/http/middleware"
@@ -17,12 +21,14 @@ import (
 )
 
 type Appointments struct {
-	q *db.Queries
+	q   *db.Queries
+	cfg *config.Config
 }
 
-func NewAppointments(pool *pgxpool.Pool) *Appointments {
+func NewAppointments(pool *pgxpool.Pool, cfg *config.Config) *Appointments {
 	return &Appointments{
-		q: db.New(pool),
+		q:   db.New(pool),
+		cfg: cfg,
 	}
 }
 
@@ -96,9 +102,12 @@ func (h *Appointments) GetSlots(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. Merge blocks
-	// Hardcoded: 15 mins appointment duration, 60 mins lead time (no booking within 60 mins)
-	now := time.Now()
-	merged := availability.MergeBlocks(blocks, bookedTimes, now, 60, 15)
+	loc, err := time.LoadLocation(h.cfg.Timezone)
+	if err != nil {
+		loc = time.UTC
+	}
+	now := time.Now().In(loc)
+	merged := availability.MergeBlocks(blocks, bookedTimes, now, h.cfg.MinLeadTimeMinutes, h.cfg.SlotDurationMinutes)
 
 	type FrontendSlot struct {
 		Start  string `json:"start"`
@@ -119,7 +128,7 @@ func (h *Appointments) GetSlots(w http.ResponseWriter, r *http.Request) {
 			
 			flatSlots = append(flatSlots, FrontendSlot{
 				Start:  s.Time.Format("15:04"),
-				End:    s.Time.Add(15 * time.Minute).Format("15:04"),
+				End:    s.Time.Add(time.Duration(h.cfg.SlotDurationMinutes) * time.Minute).Format("15:04"),
 				Status: status,
 			})
 		}
@@ -184,7 +193,7 @@ func (h *Appointments) Book(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	endTime := startTime.Add(15 * time.Minute)
+	endTime := startTime.Add(time.Duration(h.cfg.SlotDurationMinutes) * time.Minute)
 
 	// Note: We are relying on the database partial unique index (uniq_active_slot)
 	// to prevent double-booking. If it fails due to constraint violation,
@@ -209,8 +218,9 @@ func (h *Appointments) Book(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		// Basic error handling for unique violation
-		if err.Error() == "ERROR: duplicate key value violates unique constraint \"uniq_active_slot\" (SQLSTATE 23505)" {
+		// Check for unique constraint violation (double-booking)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			response.Conflict(w, "This slot is already booked")
 			return
 		}
@@ -224,14 +234,20 @@ func (h *Appointments) Book(w http.ResponseWriter, r *http.Request) {
 func (h *Appointments) GetByReference(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ref := chi.URLParam(r, "reference")
+	patientPhone := ctx.Value(middleware.PatientPhoneKey).(string)
 
 	app, err := h.q.GetAppointmentByReference(ctx, ref)
 	if err != nil {
-		if err.Error() == "no rows in result set" {
+		if errors.Is(err, pgx.ErrNoRows) {
 			response.NotFound(w, "appointment not found")
 			return
 		}
 		response.InternalServerError(w, r, err)
+		return
+	}
+
+	if app.PatientPhone == nil || *app.PatientPhone != patientPhone {
+		response.Unauthorized(w, "you don't have permission to access this appointment")
 		return
 	}
 
@@ -241,14 +257,20 @@ func (h *Appointments) GetByReference(w http.ResponseWriter, r *http.Request) {
 func (h *Appointments) Cancel(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ref := chi.URLParam(r, "reference")
+	patientPhone := ctx.Value(middleware.PatientPhoneKey).(string)
 
 	app, err := h.q.GetAppointmentByReference(ctx, ref)
 	if err != nil {
-		if err.Error() == "no rows in result set" {
+		if errors.Is(err, pgx.ErrNoRows) {
 			response.NotFound(w, "appointment not found")
 			return
 		}
 		response.InternalServerError(w, r, err)
+		return
+	}
+
+	if app.PatientPhone == nil || *app.PatientPhone != patientPhone {
+		response.Unauthorized(w, "you don't have permission to modify this appointment")
 		return
 	}
 

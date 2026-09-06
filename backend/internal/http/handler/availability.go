@@ -2,12 +2,15 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tryaksh/clinic/backend/internal/db"
 	"github.com/tryaksh/clinic/backend/internal/domain/availability"
@@ -286,7 +289,7 @@ func (h *Availability) BulkOpen(w http.ResponseWriter, r *http.Request) {
 
 	dc, err := h.q.GetDoctorClinic(ctx, req.DoctorID, req.ClinicID)
 	if err != nil {
-		if err.Error() == "no rows in result set" {
+		if errors.Is(err, pgx.ErrNoRows) {
 			response.BadRequest(w, "doctor is not linked to this clinic")
 			return
 		}

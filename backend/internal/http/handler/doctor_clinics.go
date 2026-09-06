@@ -2,10 +2,12 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tryaksh/clinic/backend/internal/db"
 	"github.com/tryaksh/clinic/backend/internal/http/response"
@@ -56,7 +58,7 @@ func (h *DoctorClinics) Get(w http.ResponseWriter, r *http.Request) {
 
 	dc, err := h.q.GetDoctorClinic(ctx, doctorID, clinicID)
 	if err != nil {
-		if err.Error() == "no rows in result set" {
+		if errors.Is(err, pgx.ErrNoRows) {
 			// Not an error, just means they aren't linked yet. Return empty/404.
 			response.NotFound(w, "doctor-clinic link not found")
 			return
@@ -65,7 +67,11 @@ func (h *DoctorClinics) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response.JSON(w, http.StatusOK, dc)
+	response.JSON(w, http.StatusOK, map[string]interface{}{
+		"doctor_id":     dc.DoctorID,
+		"clinic_id":     dc.ClinicID,
+		"default_hours": json.RawMessage(dc.DefaultHours),
+	})
 }
 
 func (h *DoctorClinics) UpdateHours(w http.ResponseWriter, r *http.Request) {
@@ -98,7 +104,7 @@ func (h *DoctorClinics) UpdateHours(w http.ResponseWriter, r *http.Request) {
 		DefaultHours: req.DefaultHours,
 	})
 	if err != nil {
-		if err.Error() == "no rows in result set" {
+		if errors.Is(err, pgx.ErrNoRows) {
 			response.NotFound(w, "doctor-clinic link not found")
 			return
 		}
@@ -106,7 +112,11 @@ func (h *DoctorClinics) UpdateHours(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response.JSON(w, http.StatusOK, dc)
+	response.JSON(w, http.StatusOK, map[string]interface{}{
+		"doctor_id":     dc.DoctorID,
+		"clinic_id":     dc.ClinicID,
+		"default_hours": json.RawMessage(dc.DefaultHours),
+	})
 }
 
 func (h *DoctorClinics) Unlink(w http.ResponseWriter, r *http.Request) {

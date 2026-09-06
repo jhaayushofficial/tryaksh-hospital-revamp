@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/tryaksh/clinic/backend/internal/config"
 	httpInternal "github.com/tryaksh/clinic/backend/internal/http"
 	"github.com/tryaksh/clinic/backend/internal/platform/cleanup"
+	"github.com/tryaksh/clinic/backend/internal/platform/notify"
 )
 
 func main() {
@@ -58,7 +60,26 @@ func main() {
 	// Start background cleanup routines
 	cleanup.StartOTPCleanup(pool, 1*time.Hour)
 
-	router := httpInternal.NewRouter(cfg, pool, logger)
+	// Build the notifier based on the configured OTP channel.
+	var notifier notify.Notifier
+	switch strings.ToLower(cfg.OTPChannel) {
+	case "sms":
+		notifier, err = notify.NewMSG91Notifier(cfg.MSG91AuthKey, cfg.MSG91SenderID, cfg.MSG91DLTTemplateID)
+		if err != nil {
+			logger.Error("failed to initialise MSG91 SMS notifier", "error", err)
+			os.Exit(1)
+		}
+		logger.Info("OTP channel: SMS via MSG91")
+	case "console":
+		notifier = notify.NewConsoleNotifier()
+		logger.Info("OTP channel: console (mock — codes printed to stdout)")
+	default:
+		// Fallback to console for any unrecognised value (e.g. "whatsapp" not yet implemented).
+		logger.Warn("OTP channel not implemented, falling back to console", "channel", cfg.OTPChannel)
+		notifier = notify.NewConsoleNotifier()
+	}
+
+	router := httpInternal.NewRouter(cfg, pool, logger, notifier)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),

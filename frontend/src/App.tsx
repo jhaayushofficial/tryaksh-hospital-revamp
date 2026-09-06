@@ -1,24 +1,24 @@
 import { useState, useEffect } from "react";
-import { Phone, MapPin, Clock, ChevronRight, ChevronLeft, Check, Loader2 } from "lucide-react";
+import { Phone, MapPin, Clock, ChevronRight, ChevronLeft, Check, Loader2, Mail } from "lucide-react";
+import { FaInstagram, FaFacebook, FaLinkedin } from "react-icons/fa";
 import { BrowserRouter, Routes, Route, useNavigate, useSearchParams } from "react-router-dom";
+import Carousel from 'react-bootstrap/Carousel';
+import 'bootstrap/dist/css/bootstrap.min.css';
 import * as api from "./api";
 import "./index.css";
 import { format, addDays } from "date-fns";
+import { auth } from "./firebase";
+import { RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from "firebase/auth";
 
 function Logo({ size = 64 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 200 200" className="shrink-0">
-      <circle cx="100" cy="100" r="94" className="fill-navy stroke-red" strokeWidth="7" />
-      <g fill="none" stroke="#FFFFFF" strokeWidth="13" strokeLinecap="round">
-        <path d="M55 68 Q100 60 150 72" />
-        <path d="M50 96 Q100 88 152 100" />
-        <path d="M52 124 Q98 118 148 128" />
-      </g>
-      <path d="M100 34 L112 78 Q112 118 100 132 Q88 118 88 78 Z" className="fill-red" />
-      <text x="100" y="168" textAnchor="middle" className="font-devanagari text-[34px] font-bold fill-red">
-        त्र्यक्ष
-      </text>
-    </svg>
+    <img
+      src="https://res.cloudinary.com/w5nagizy/image/upload/f_auto,q_auto/Tryaksh_1"
+      alt="Tryaksh Hospital & Diagnostics Logo"
+      width={size}
+      height={size}
+      className="shrink-0 object-contain"
+    />
   );
 }
 
@@ -76,6 +76,32 @@ function BookingWizard() {
     const newParams = new URLSearchParams(searchParams);
     newParams.set("step", newStep);
     Object.entries(params).forEach(([k, v]) => newParams.set(k, v));
+
+    // Clear downstream params to prevent stale state when navigating backwards
+    const stepOrder = ["home", "doctor", "clinic", "date", "slot", "details", "confirmed"];
+    const targetIdx = stepOrder.indexOf(newStep);
+    if (targetIdx <= stepOrder.indexOf("doctor")) {
+      newParams.delete("doctor");
+      newParams.delete("clinic");
+      newParams.delete("date");
+      newParams.delete("slot");
+      newParams.delete("slotEnd");
+    } else if (targetIdx <= stepOrder.indexOf("clinic")) {
+      newParams.delete("clinic");
+      newParams.delete("date");
+      newParams.delete("slot");
+      newParams.delete("slotEnd");
+    } else if (targetIdx <= stepOrder.indexOf("date")) {
+      newParams.delete("date");
+      newParams.delete("slot");
+      newParams.delete("slotEnd");
+    } else if (targetIdx <= stepOrder.indexOf("slot")) {
+      newParams.delete("slot");
+      newParams.delete("slotEnd");
+    }
+
+    // Re-apply the explicit params (they take priority)
+    Object.entries(params).forEach(([k, v]) => newParams.set(k, v));
     setSearchParams(newParams);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -115,6 +141,110 @@ function BookingWizard() {
             </div>
             <div className="flex items-center gap-2">
               <Phone size={16} className="text-red" /> 922 9333 922 (call or WhatsApp)
+            </div>
+          </div>
+        </section>
+        
+        <section className="w-full py-8">
+          <Carousel fade>
+            <Carousel.Item>
+              <img className="d-block w-100 object-cover h-[600px] md:h-[750px]" src="https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?q=80&w=2000&auto=format&fit=crop" alt="Hospital Front" />
+              <Carousel.Caption className="d-none d-md-block bg-black/60 rounded mb-4">
+                <h5>Modern Facilities</h5>
+                <p>Equipped with state-of-the-art medical technology.</p>
+              </Carousel.Caption>
+            </Carousel.Item>
+            <Carousel.Item>
+              <img className="d-block w-100 object-cover h-[600px] md:h-[750px]" src="https://images.unsplash.com/photo-1579684385127-1ef15d508118?q=80&w=2000&auto=format&fit=crop" alt="Laboratory" />
+              <Carousel.Caption className="d-none d-md-block bg-black/60 rounded mb-4">
+                <h5>Advanced Diagnostics</h5>
+                <p>24/7 in-house laboratory and imaging services.</p>
+              </Carousel.Caption>
+            </Carousel.Item>
+            <Carousel.Item>
+              <img className="d-block w-100 object-cover h-[600px] md:h-[750px]" src="https://images.unsplash.com/photo-1581595220892-b0739db3ba8c?q=80&w=2000&auto=format&fit=crop" alt="Patient Room" />
+              <Carousel.Caption className="d-none d-md-block bg-black/60 rounded mb-4">
+                <h5>Comfortable Wards</h5>
+                <p>Clean and spacious rooms for patient recovery.</p>
+              </Carousel.Caption>
+            </Carousel.Item>
+            <Carousel.Item>
+              <img className="d-block w-100 object-cover h-[600px] md:h-[750px]" src="https://res.cloudinary.com/w5nagizy/image/upload/v1788730017/Dr.MahimaMishra_Operating.jpg" alt="Dr. Mahima Mishra Operating" />
+              <Carousel.Caption className="d-none d-md-block bg-black/60 rounded mb-4">
+                <h5>Expert Surgical Care</h5>
+                <p>Dr. Mahima Mishra performing a procedure in our modern OT.</p>
+              </Carousel.Caption>
+            </Carousel.Item>
+            <Carousel.Item>
+              <img className="d-block w-100 object-cover h-[600px] md:h-[750px]" src="https://res.cloudinary.com/w5nagizy/image/upload/v1788730017/Dr.Shankar_OPD.jpg" alt="Dr. Shankar Mishra OPD" />
+              <Carousel.Caption className="d-none d-md-block bg-black/60 rounded mb-4">
+                <h5>Dedicated Patient Consultations</h5>
+                <p>Thorough diagnostic practice in our outpatient department.</p>
+              </Carousel.Caption>
+            </Carousel.Item>
+            <Carousel.Item>
+              <img className="d-block w-100 object-cover h-[600px] md:h-[750px]" src="https://res.cloudinary.com/w5nagizy/image/upload/v1788730018/Dr_Mahima_OPD.jpg" alt="Dr. Mahima Mishra OPD" />
+              <Carousel.Caption className="d-none d-md-block bg-black/60 rounded mb-4">
+                <h5>Compassionate Care</h5>
+                <p>Personalized attention for every patient.</p>
+              </Carousel.Caption>
+            </Carousel.Item>
+            <Carousel.Item>
+              <img className="d-block w-100 object-cover h-[600px] md:h-[750px]" src="https://res.cloudinary.com/w5nagizy/image/upload/v1788730017/Dr.Mahima_Picwithpatient.jpg" alt="Trusted by Patients" />
+              <Carousel.Caption className="d-none d-md-block bg-black/60 rounded mb-4">
+                <h5>Trusted Relationships</h5>
+                <p>Building lasting health relationships within the Darbhanga community.</p>
+              </Carousel.Caption>
+            </Carousel.Item>
+          </Carousel>
+        </section>
+
+        <section className="max-w-5xl mx-auto px-6 py-12">
+          <h2 className="font-lora text-navy text-2xl md:text-3xl text-center mb-10">Our Team</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* Doctor 1 */}
+            <div className="bg-white border border-[#E4E2D9] rounded-lg overflow-hidden flex flex-col text-center shadow-sm">
+              <div className="h-64 bg-[#F1F0EA] flex items-center justify-center">
+                <img className="w-full h-full object-cover" src="https://res.cloudinary.com/w5nagizy/image/upload/v1788728660/Dr.PashupatiMishra.png" alt="डॉ. पशुपति मिश्रा" />
+              </div>
+              <div className="p-6 flex-1 flex flex-col">
+                <h3 className="font-devanagari text-xl text-navy font-bold mb-1">डॉ. पशुपति मिश्रा</h3>
+                <p className="text-red-deep font-medium mb-4">वरिष्ठ सलाहकार चिकित्सक</p>
+                <div className="mt-auto text-sm text-[#4A4A45] leading-relaxed">
+                  <p>एमबी बी एस (डीएमसीएच),</p>
+                  <p>डी सी पी (डीएमसीएच)</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Doctor 2 */}
+            <div className="bg-white border border-[#E4E2D9] rounded-lg overflow-hidden flex flex-col text-center shadow-sm">
+              <div className="h-64 bg-[#F1F0EA] flex items-center justify-center">
+                <img className="w-full h-full object-cover" src="https://res.cloudinary.com/w5nagizy/image/upload/v1788728756/Dr.ShankarMishra.png" alt="डॉ. शंकर मिश्रा" />
+              </div>
+              <div className="p-6 flex-1 flex flex-col">
+                <h3 className="font-devanagari text-xl text-navy font-bold mb-1">डॉ. शंकर मिश्रा, एम.डी .</h3>
+                <p className="text-red-deep font-medium mb-4">जनरल फिजिशियन एवं पैथोलॉजिस्ट</p>
+                <div className="mt-auto text-sm text-[#4A4A45] leading-relaxed">
+                  <p>एमबीबीएस ( बीजेएमसी अहमदाबाद)</p>
+                  <p>एम.डी . (पीएमसीएच पटना)</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Doctor 3 */}
+            <div className="bg-white border border-[#E4E2D9] rounded-lg overflow-hidden flex flex-col text-center shadow-sm">
+              <div className="h-64 bg-[#F1F0EA] flex items-center justify-center">
+                <img className="w-full h-full object-cover" src="https://res.cloudinary.com/w5nagizy/image/upload/v1788728744/Dr.MahimaMishra.png" alt="डॉ. (श्रीमती) महिमा मिश्रा" />
+              </div>
+              <div className="p-6 flex-1 flex flex-col">
+                <h3 className="font-devanagari text-xl text-navy font-bold mb-1">डॉ. (श्रीमती) महिमा मिश्रा , एम.एस.</h3>
+                <p className="text-red-deep font-medium mb-4">स्त्री एवं प्रसूति रोग विशेषज्ञ</p>
+                <div className="mt-auto text-sm text-[#4A4A45] leading-relaxed">
+                  <p>एमबीबीएस ( पीएमसीएच पटना )</p>
+                  <p>एम.एस. (पीएमसीएच पटना)</p>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -274,11 +404,24 @@ function BookingDetails({ onBack, doctor, clinicId, date, slotStart, slotEnd }: 
   const [loading, setLoading] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
 
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+
+  useEffect(() => {
+    if (!(window as any).recaptchaVerifier) {
+      (window as any).recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        size: 'invisible'
+      });
+    }
+  }, []);
+
   const handleRequestOTP = async () => {
     setError("");
     setLoading(true);
     try {
-      await api.requestOTP(phone);
+      const formattedPhone = phone.startsWith("+") ? phone : `+91${phone}`;
+      const appVerifier = (window as any).recaptchaVerifier;
+      const result = await signInWithPhoneNumber(auth, formattedPhone, appVerifier);
+      setConfirmationResult(result);
       setOtpStage(true);
     } catch (err: any) {
       setError(err.message);
@@ -290,9 +433,16 @@ function BookingDetails({ onBack, doctor, clinicId, date, slotStart, slotEnd }: 
     setError("");
     setLoading(true);
     try {
-      // 1. Verify OTP
-      const { token } = await api.verifyOTP(phone, code);
-      // 2. Book
+      if (!confirmationResult) throw new Error("Session expired. Please try again.");
+      
+      // 1. Verify OTP with Firebase
+      const result = await confirmationResult.confirm(code);
+      const idToken = await result.user.getIdToken();
+      
+      // 2. Exchange Firebase token for our backend token
+      const { token } = await api.firebaseLogin(idToken);
+      
+      // 3. Book
       const booking = await api.bookAppointment({
         doctor_id: doctor.id,
         clinic_id: clinicId,
@@ -329,12 +479,16 @@ function BookingDetails({ onBack, doctor, clinicId, date, slotStart, slotEnd }: 
           />
           <label className="block text-xs mb-1 text-[#6B6B64]">Phone number</label>
           <input
+            type="tel"
+            inputMode="numeric"
+            pattern="\d*"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
             placeholder="10-digit mobile number"
             className="w-full px-3 py-2 rounded text-sm mb-5 border border-[#E4E2D9]"
           />
           {error && <p className="text-red text-xs mb-3">{error}</p>}
+          <div id="recaptcha-container"></div>
           <button
             disabled={!name || phone.length < 10 || loading}
             onClick={handleRequestOTP}
@@ -350,8 +504,10 @@ function BookingDetails({ onBack, doctor, clinicId, date, slotStart, slotEnd }: 
         <>
           <p className="text-sm mb-4 text-navy">Enter the 6-digit code sent to +91 {phone}</p>
           <input
+            inputMode="numeric"
+            pattern="\d*"
             value={code}
-            onChange={(e) => setCode(e.target.value)}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
             placeholder="000000"
             className="w-full px-3 py-2 rounded text-sm mb-5 border border-[#E4E2D9] text-center tracking-widest text-lg"
             maxLength={6}
@@ -405,6 +561,49 @@ function PublicLayout() {
       <div className="flex-1">
         <BookingWizard />
       </div>
+
+      <footer className="bg-navy-deep text-[#C6CEE2] py-12 px-6 mt-auto">
+        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div>
+            <div className="flex items-center gap-3 mb-4">
+              <Logo size={40} />
+              <div>
+                <div className="font-lora text-white text-lg leading-tight">Tryaksh Hospital</div>
+                <div className="text-[#8FA0C6] text-xs">&amp; Diagnostics</div>
+              </div>
+            </div>
+            <p className="text-sm max-w-sm text-[#8FA0C6]">
+              Committed to providing world-class healthcare and advanced diagnostics services.
+            </p>
+          </div>
+          
+          <div className="flex flex-col md:items-end justify-center">
+            <h4 className="text-white font-medium mb-4">Connect With Us</h4>
+            <div className="space-y-3 text-sm flex flex-col md:items-end">
+              <a href="tel:+919229333922" className="flex items-center gap-2 hover:text-white transition-colors">
+                <Phone size={16} /> 922 9333 922
+              </a>
+              <a href="mailto:shankar.kr.mishra@gmail.com" className="flex items-center gap-2 hover:text-white transition-colors">
+                <Mail size={16} /> shankar.kr.mishra@gmail.com
+              </a>
+              <div className="flex gap-4 mt-2">
+                <a href="https://www.instagram.com/tryakshhospitalanddiagnostics/" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">
+                  <FaInstagram size={20} />
+                </a>
+                <a href="https://www.facebook.com/share/1BTSAq8Qoh/?mibextid=wwXIfr" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">
+                  <FaFacebook size={20} />
+                </a>
+                <a href="https://www.linkedin.com/in/dr-shankar-mishra-md-684771160?utm_source=share_via&utm_content=profile&utm_medium=member_ios" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">
+                  <FaLinkedin size={20} />
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="max-w-5xl mx-auto mt-10 pt-6 border-t border-[#314164] text-xs text-center text-[#8FA0C6]">
+          &copy; {new Date().getFullYear()} Tryaksh Hospital &amp; Diagnostics. All rights reserved.
+        </div>
+      </footer>
     </div>
   );
 }

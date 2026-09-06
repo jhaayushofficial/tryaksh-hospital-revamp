@@ -79,6 +79,10 @@ function Doctors() {
   const [doctors, setDoctors] = useState<any[]>([]);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
+  const [qualification, setQualification] = useState("");
+  const [specialization, setSpecialization] = useState("");
+  const [experience, setExperience] = useState("");
+  const [bio, setBio] = useState("");
 
   const load = () => adminApi.fetchAllDoctors().then(setDoctors).catch(console.error);
   useEffect(() => { load(); }, []);
@@ -88,14 +92,18 @@ function Doctors() {
       await adminApi.createDoctor({
         slug: slug,
         name: name,
-        qualification: "MBBS",
-        specialization: "General",
-        experience_years: 5,
-        bio: "Bio here",
+        qualification: qualification,
+        specialization: specialization,
+        experience_years: experience ? parseInt(experience) : 0,
+        bio: bio,
         active: true
       });
       setName("");
       setSlug("");
+      setQualification("");
+      setSpecialization("");
+      setExperience("");
+      setBio("");
       load();
     } catch (e: any) { alert(e.message); }
   };
@@ -105,11 +113,15 @@ function Doctors() {
       <h1 className="text-2xl font-lora text-navy mb-6">Doctors</h1>
       <div className="bg-white p-6 rounded border border-[#E4E2D9] mb-6">
         <h2 className="text-lg mb-4">Add Doctor</h2>
-        <div className="flex gap-4">
+        <div className="grid grid-cols-2 gap-4 mb-4">
           <input value={name} onChange={e => setName(e.target.value)} placeholder="Name" className="border px-3 py-2 rounded" />
           <input value={slug} onChange={e => setSlug(e.target.value)} placeholder="Slug (e.g. dr-smith)" className="border px-3 py-2 rounded" />
-          <button onClick={handleAdd} className="bg-navy text-white px-4 py-2 rounded">Add</button>
+          <input value={qualification} onChange={e => setQualification(e.target.value)} placeholder="Qualification" className="border px-3 py-2 rounded" />
+          <input value={specialization} onChange={e => setSpecialization(e.target.value)} placeholder="Specialization" className="border px-3 py-2 rounded" />
+          <input type="number" value={experience} onChange={e => setExperience(e.target.value)} placeholder="Experience (Years)" className="border px-3 py-2 rounded" />
+          <input value={bio} onChange={e => setBio(e.target.value)} placeholder="Bio" className="border px-3 py-2 rounded" />
         </div>
+        <button onClick={handleAdd} className="bg-navy text-white px-4 py-2 rounded">Add</button>
       </div>
       <div className="space-y-3">
         {doctors?.map(d => (
@@ -127,6 +139,8 @@ function Clinics() {
   const [clinics, setClinics] = useState<any[]>([]);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
 
   const load = () => adminApi.fetchAllClinics().then(setClinics).catch(console.error);
   useEffect(() => { load(); }, []);
@@ -136,12 +150,14 @@ function Clinics() {
       await adminApi.createClinic({
         slug: slug,
         name: name,
-        address: "Address",
-        phone: "0000000000",
+        address: address,
+        phone: phone,
         active: true
       });
       setName("");
       setSlug("");
+      setAddress("");
+      setPhone("");
       load();
     } catch (e: any) { alert(e.message); }
   };
@@ -151,11 +167,13 @@ function Clinics() {
       <h1 className="text-2xl font-lora text-navy mb-6">Clinics</h1>
       <div className="bg-white p-6 rounded border border-[#E4E2D9] mb-6">
         <h2 className="text-lg mb-4">Add Clinic</h2>
-        <div className="flex gap-4">
+        <div className="grid grid-cols-2 gap-4 mb-4">
           <input value={name} onChange={e => setName(e.target.value)} placeholder="Name" className="border px-3 py-2 rounded" />
           <input value={slug} onChange={e => setSlug(e.target.value)} placeholder="Slug" className="border px-3 py-2 rounded" />
-          <button onClick={handleAdd} className="bg-navy text-white px-4 py-2 rounded">Add</button>
+          <input value={address} onChange={e => setAddress(e.target.value)} placeholder="Address" className="border px-3 py-2 rounded" />
+          <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone" className="border px-3 py-2 rounded" />
         </div>
+        <button onClick={handleAdd} className="bg-navy text-white px-4 py-2 rounded">Add</button>
       </div>
       <div className="space-y-3">
         {clinics?.map(c => (
@@ -191,7 +209,7 @@ function Appointments() {
             <div>
               <p className="font-bold text-navy">{a.patient_name} <span className="text-sm font-normal text-gray-500">({a.patient_phone})</span></p>
               <p className="text-sm text-gray-600">
-                {a.appointment_date ? a.appointment_date.split('T')[0] : ''} at {a.start_time ? a.start_time.split('T')[1].substring(0,5) : ''}
+                {a.appointment_date ? a.appointment_date.split('T')[0] : ''} at {a.start_time ? (a.start_time.includes('T') ? a.start_time.split('T')[1].substring(0,5) : a.start_time.substring(0,5)) : ''}
               </p>
               <span className={`text-xs px-2 py-1 rounded mt-2 inline-block ${a.status === 'BOOKED' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
                 {a.status}
@@ -244,8 +262,12 @@ function AvailabilityAdmin() {
 
   const updateScheduleForDay = (day: string, field: string, value: string) => {
     const newSchedule = { ...schedule };
-    if (!newSchedule[day]) newSchedule[day] = [{}];
-    if (newSchedule[day].length === 0) newSchedule[day].push({});
+    // Deep copy the day's array and block to avoid mutating React state
+    if (!newSchedule[day] || newSchedule[day].length === 0) {
+      newSchedule[day] = [{}];
+    } else {
+      newSchedule[day] = [{ ...newSchedule[day][0] }];
+    }
     
     if (value === "") {
       delete newSchedule[day][0][field];
@@ -287,17 +309,8 @@ function AvailabilityAdmin() {
       const from = new Date().toISOString().split("T")[0];
       const to = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
       
-      const res = await fetch("http://localhost:8080/api/v1/admin/availability/bulk", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("admin_token")}`
-        },
-        body: JSON.stringify({ doctor_id: doctorId, clinic_id: clinicId, from, to })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to generate");
-      setMessage(`Successfully generated ${data.created_blocks} new 15-min slots for the next 30 days!`);
+      const data = await adminApi.bulkGenerateAvailability(doctorId, clinicId, from, to);
+      setMessage(`Successfully generated ${data.created_blocks} new availability blocks for the next 30 days!`);
     } catch (e: any) {
       setMessage(`Error: ${e.message}`);
     }
@@ -435,10 +448,10 @@ export default function Admin() {
       <main className="flex-1 overflow-auto">
         <Routes>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/appointments" element={<Appointments />} />
-          <Route path="/doctors" element={<Doctors />} />
-          <Route path="/clinics" element={<Clinics />} />
-          <Route path="/availability" element={<AvailabilityAdmin />} />
+          <Route path="appointments" element={<Appointments />} />
+          <Route path="doctors" element={<Doctors />} />
+          <Route path="clinics" element={<Clinics />} />
+          <Route path="availability" element={<AvailabilityAdmin />} />
         </Routes>
       </main>
     </div>
