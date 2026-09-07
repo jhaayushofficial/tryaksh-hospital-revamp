@@ -45,10 +45,10 @@ func NewMSG91Notifier(authKey, senderID, dltTemplateID string) (*MSG91Notifier, 
 
 // msg91SendRequest is the JSON payload for the MSG91 Send SMS API v2.
 type msg91SendRequest struct {
-	Flow    string         `json:"flow_id"`
-	Sender  string         `json:"sender"`
-	Mobiles string         `json:"mobiles"`
-	OTP     string         `json:"otp,omitempty"`
+	Flow    string            `json:"flow_id"`
+	Sender  string            `json:"sender"`
+	Mobiles string            `json:"mobiles"`
+	OTP     string            `json:"otp,omitempty"`
 	Vars    map[string]string `json:"VAR1,omitempty"`
 }
 

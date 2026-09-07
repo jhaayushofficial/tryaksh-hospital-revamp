@@ -77,7 +77,9 @@ type Config struct {
 
 	// ── Optional ────────────────────────────────────────────────────────────
 	SentryDSN string `env:"SENTRY_DSN"`
-	LogLevel  string `env:"LOG_LEVEL" envDefault:"info"`
+	LogLevel  string `env:"LOG_LEVEL"  envDefault:"info"`
+	// LogFormat is "json" for shipped logs or "text" for readable local output.
+	LogFormat string `env:"LOG_FORMAT" envDefault:"json"`
 }
 
 // Load reads the .env file (if present), parses environment variables into

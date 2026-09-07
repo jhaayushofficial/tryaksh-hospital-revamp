@@ -4,8 +4,11 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"math/big"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -93,7 +96,7 @@ func (h *Appointments) GetSlots(w http.ResponseWriter, r *http.Request) {
 		response.InternalServerError(w, r, err)
 		return
 	}
-	
+
 	// Combine booked times with the date as well
 	var bookedTimes []time.Time
 	y, m, d := date.Date()
@@ -125,7 +128,7 @@ func (h *Appointments) GetSlots(w http.ResponseWriter, r *http.Request) {
 			} else if s.Status == availability.StatusPast {
 				status = "PAST"
 			}
-			
+
 			flatSlots = append(flatSlots, FrontendSlot{
 				Start:  s.Time.Format("15:04"),
 				End:    s.Time.Add(time.Duration(h.cfg.SlotDurationMinutes) * time.Minute).Format("15:04"),
@@ -143,14 +146,22 @@ func (h *Appointments) GetSlots(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func generateReference() string {
-	const charset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+// referenceCharset omits I, O, 0 and 1 so a reference read over the phone
+// cannot be transcribed ambiguously.
+const referenceCharset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+// generateReference returns a human-quotable booking reference, e.g. "AB-CDEFGH".
+func generateReference() (string, error) {
 	b := make([]byte, 8)
+	max := big.NewInt(int64(len(referenceCharset)))
 	for i := range b {
-		num, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
-		b[i] = charset[num.Int64()]
+		num, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			return "", fmt.Errorf("generating booking reference: %w", err)
+		}
+		b[i] = referenceCharset[num.Int64()]
 	}
-	return string(b[:2]) + "-" + string(b[2:])
+	return string(b[:2]) + "-" + string(b[2:]), nil
 }
 
 func (h *Appointments) Book(w http.ResponseWriter, r *http.Request) {
@@ -173,13 +184,18 @@ func (h *Appointments) Book(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authPhone, ok := ctx.Value(middleware.PatientPhoneKey).(string)
-	if !ok || authPhone == "" {
+	authPhone, ok := middleware.PatientPhone(ctx)
+	if !ok {
 		response.Unauthorized(w, "patient phone not found in authenticated context")
 		return
 	}
 	// Force the phone to be the one from the authenticated token
 	req.PatientPhone = authPhone
+
+	if strings.TrimSpace(req.PatientName) == "" {
+		response.BadRequest(w, "patient_name is required")
+		return
+	}
 
 	appDate, err := time.Parse("2006-01-02", req.Date)
 	if err != nil {
@@ -199,7 +215,11 @@ func (h *Appointments) Book(w http.ResponseWriter, r *http.Request) {
 	// to prevent double-booking. If it fails due to constraint violation,
 	// it will return a specific error code which we should ideally catch and translate.
 
-	ref := generateReference()
+	ref, err := generateReference()
+	if err != nil {
+		response.InternalServerError(w, r, err)
+		return
+	}
 
 	app, err := h.q.CreateAppointment(ctx, db.CreateAppointmentParams{
 		Reference:       ref,
@@ -218,23 +238,43 @@ func (h *Appointments) Book(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		// Check for unique constraint violation (double-booking)
+		// uniq_active_slot rejects a second live booking for the same slot;
+		// that is a client-visible conflict, not a server fault.
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
+			slog.WarnContext(ctx, "booking rejected: slot already taken",
+				slog.String("doctor_id", req.DoctorID.String()),
+				slog.String("clinic_id", req.ClinicID.String()),
+				slog.String("date", req.Date),
+				slog.String("start_time", req.Time),
+			)
 			response.Conflict(w, "This slot is already booked")
 			return
 		}
-		response.InternalServerError(w, r, err)
+		response.InternalServerError(w, r, fmt.Errorf("creating appointment: %w", err))
 		return
 	}
 
-	response.JSON(w, http.StatusCreated, app)
+	slog.InfoContext(ctx, "appointment booked",
+		slog.String("reference", app.Reference),
+		slog.String("doctor_id", req.DoctorID.String()),
+		slog.String("clinic_id", req.ClinicID.String()),
+		slog.String("date", req.Date),
+		slog.String("start_time", req.Time),
+	)
+
+	response.JSONCtx(ctx, w, http.StatusCreated, app)
 }
 
 func (h *Appointments) GetByReference(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ref := chi.URLParam(r, "reference")
-	patientPhone := ctx.Value(middleware.PatientPhoneKey).(string)
+
+	patientPhone, ok := middleware.PatientPhone(ctx)
+	if !ok {
+		response.Unauthorized(w, "patient phone not found in authenticated context")
+		return
+	}
 
 	app, err := h.q.GetAppointmentByReference(ctx, ref)
 	if err != nil {
@@ -242,22 +282,28 @@ func (h *Appointments) GetByReference(w http.ResponseWriter, r *http.Request) {
 			response.NotFound(w, "appointment not found")
 			return
 		}
-		response.InternalServerError(w, r, err)
+		response.InternalServerError(w, r, fmt.Errorf("loading appointment %q: %w", ref, err))
 		return
 	}
 
 	if app.PatientPhone == nil || *app.PatientPhone != patientPhone {
+		slog.WarnContext(ctx, "appointment access denied", slog.String("reference", ref))
 		response.Unauthorized(w, "you don't have permission to access this appointment")
 		return
 	}
 
-	response.JSON(w, http.StatusOK, app)
+	response.JSONCtx(ctx, w, http.StatusOK, app)
 }
 
 func (h *Appointments) Cancel(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ref := chi.URLParam(r, "reference")
-	patientPhone := ctx.Value(middleware.PatientPhoneKey).(string)
+
+	patientPhone, ok := middleware.PatientPhone(ctx)
+	if !ok {
+		response.Unauthorized(w, "patient phone not found in authenticated context")
+		return
+	}
 
 	app, err := h.q.GetAppointmentByReference(ctx, ref)
 	if err != nil {
@@ -265,11 +311,12 @@ func (h *Appointments) Cancel(w http.ResponseWriter, r *http.Request) {
 			response.NotFound(w, "appointment not found")
 			return
 		}
-		response.InternalServerError(w, r, err)
+		response.InternalServerError(w, r, fmt.Errorf("loading appointment %q: %w", ref, err))
 		return
 	}
 
 	if app.PatientPhone == nil || *app.PatientPhone != patientPhone {
+		slog.WarnContext(ctx, "appointment cancellation denied", slog.String("reference", ref))
 		response.Unauthorized(w, "you don't have permission to modify this appointment")
 		return
 	}
@@ -293,24 +340,30 @@ func (h *Appointments) Cancel(w http.ResponseWriter, r *http.Request) {
 
 	updated, err := h.q.UpdateAppointmentStatus(ctx, app.ID, "CANCELLED", &cancelledBy, reason)
 	if err != nil {
-		response.InternalServerError(w, r, err)
+		response.InternalServerError(w, r, fmt.Errorf("cancelling appointment %q: %w", ref, err))
 		return
 	}
 
-	response.JSON(w, http.StatusOK, updated)
+	slog.InfoContext(ctx, "appointment cancelled",
+		slog.String("reference", ref),
+		slog.String("cancelled_by", cancelledBy),
+		slog.Bool("reason_given", reason != nil),
+	)
+
+	response.JSONCtx(ctx, w, http.StatusOK, updated)
 }
 
 func (h *Appointments) ListMyAppointments(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	authPhone, ok := ctx.Value(middleware.PatientPhoneKey).(string)
-	if !ok || authPhone == "" {
+	authPhone, ok := middleware.PatientPhone(ctx)
+	if !ok {
 		response.Unauthorized(w, "patient phone not found in authenticated context")
 		return
 	}
 
 	apps, err := h.q.ListPatientAppointments(ctx, authPhone)
 	if err != nil {
-		response.InternalServerError(w, r, err)
+		response.InternalServerError(w, r, fmt.Errorf("listing patient appointments: %w", err))
 		return
 	}
 
@@ -318,5 +371,5 @@ func (h *Appointments) ListMyAppointments(w http.ResponseWriter, r *http.Request
 		apps = []db.Appointment{}
 	}
 
-	response.JSON(w, http.StatusOK, apps)
+	response.JSONCtx(ctx, w, http.StatusOK, apps)
 }

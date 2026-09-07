@@ -1,27 +1,46 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
+	firebase "firebase.google.com/go/v4"
+	fbauth "firebase.google.com/go/v4/auth"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/api/option"
+
+	"github.com/tryaksh/clinic/backend/internal/config"
 	"github.com/tryaksh/clinic/backend/internal/db"
 	"github.com/tryaksh/clinic/backend/internal/domain/auth"
 	"github.com/tryaksh/clinic/backend/internal/http/response"
+	"github.com/tryaksh/clinic/backend/internal/platform/logging"
 	"github.com/tryaksh/clinic/backend/internal/platform/notify"
-	firebase "firebase.google.com/go/v4"
-	"github.com/tryaksh/clinic/backend/internal/config"
-	"google.golang.org/api/option"
 )
+
+// validOTPChannels are the channels a client may ask a code to be sent over.
+var validOTPChannels = map[string]bool{
+	"SMS":      true,
+	"WHATSAPP": true,
+	"CONSOLE":  true,
+}
 
 type Auth struct {
 	q        *db.Queries
 	notifier notify.Notifier
 	cfg      *config.Config
+
+	// The Firebase client fetches and caches Google's signing keys, so it is
+	// built once and shared rather than per request.
+	fbMu   sync.Mutex
+	fbAuth *fbauth.Client
 }
 
 func NewAuth(pool *pgxpool.Pool, notifier notify.Notifier, cfg *config.Config) *Auth {
@@ -30,6 +49,16 @@ func NewAuth(pool *pgxpool.Pool, notifier notify.Notifier, cfg *config.Config) *
 		notifier: notifier,
 		cfg:      cfg,
 	}
+}
+
+// otpTTL and verificationTTL read from config so the deployed values are the
+// ones that actually apply.
+func (h *Auth) otpTTL() time.Duration {
+	return time.Duration(h.cfg.OTPTTLSeconds) * time.Second
+}
+
+func (h *Auth) verificationTTL() time.Duration {
+	return time.Duration(h.cfg.OTPVerificationValidDays) * 24 * time.Hour
 }
 
 func (h *Auth) RequestCode(w http.ResponseWriter, r *http.Request) {
@@ -51,49 +80,49 @@ func (h *Auth) RequestCode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Channel == "" {
-		req.Channel = "SMS" // default
+		req.Channel = "SMS"
 	}
-
-	if req.Channel != "SMS" && req.Channel != "WHATSAPP" && req.Channel != "CONSOLE" {
+	if !validOTPChannels[req.Channel] {
 		response.BadRequest(w, "invalid channel (must be SMS, WHATSAPP, or CONSOLE)")
 		return
 	}
 
-	// Rate Limiting check should be done here if implemented.
+	ctx = logging.With(ctx,
+		logging.Phone("phone", req.Phone),
+		slog.String("channel", req.Channel),
+	)
+	r = r.WithContext(ctx)
 
 	code, err := auth.GenerateOTP()
 	if err != nil {
-		response.InternalServerError(w, r, err)
+		response.InternalServerError(w, r, fmt.Errorf("generating otp: %w", err))
 		return
 	}
 
 	hash, err := auth.HashOTP(code)
 	if err != nil {
-		response.InternalServerError(w, r, err)
+		response.InternalServerError(w, r, fmt.Errorf("hashing otp: %w", err))
 		return
 	}
 
-	expiresAt := time.Now().Add(10 * time.Minute)
-
-	_, err = h.q.CreatePhoneVerification(ctx, db.CreatePhoneVerificationParams{
+	if _, err := h.q.CreatePhoneVerification(ctx, db.CreatePhoneVerificationParams{
 		Phone:     req.Phone,
 		CodeHash:  hash,
 		Channel:   req.Channel,
-		ExpiresAt: expiresAt,
-	})
-	if err != nil {
-		response.InternalServerError(w, r, err)
+		ExpiresAt: time.Now().Add(h.otpTTL()),
+	}); err != nil {
+		response.InternalServerError(w, r, fmt.Errorf("storing phone verification: %w", err))
 		return
 	}
 
-	// Send OTP via the configured channel (SMS, WhatsApp, or console).
 	if err := h.notifier.SendOTP(ctx, req.Phone, code); err != nil {
-		slog.Error("failed to send OTP", "phone", req.Phone, "channel", req.Channel, "error", err)
-		response.InternalServerError(w, r, err)
+		response.InternalServerError(w, r, fmt.Errorf("sending otp: %w", err))
 		return
 	}
 
-	response.JSON(w, http.StatusOK, map[string]string{
+	slog.InfoContext(ctx, "otp requested", slog.Duration("ttl", h.otpTTL()))
+
+	response.JSONCtx(ctx, w, http.StatusOK, map[string]string{
 		"message": "OTP requested successfully",
 	})
 }
@@ -116,48 +145,50 @@ func (h *Auth) VerifyCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx = logging.With(ctx, logging.Phone("phone", req.Phone))
+	r = r.WithContext(ctx)
+
 	verif, err := h.q.GetLatestUnverifiedByPhone(ctx, req.Phone)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			slog.InfoContext(ctx, "otp verification rejected", slog.String("reason", "no pending code"))
 			response.NotFound(w, "Invalid or expired code")
 			return
 		}
-		response.InternalServerError(w, r, err)
+		response.InternalServerError(w, r, fmt.Errorf("loading phone verification: %w", err))
 		return
 	}
 
-	if verif.Attempts >= 5 {
+	if int(verif.Attempts) >= h.cfg.OTPMaxAttempts {
+		slog.WarnContext(ctx, "otp verification rejected",
+			slog.String("reason", "attempts exhausted"),
+			slog.Int("attempts", int(verif.Attempts)),
+		)
 		response.BadRequest(w, "too many failed attempts. please request a new code")
 		return
 	}
 
 	if !auth.CheckOTP(req.Code, verif.CodeHash) {
-		err := h.q.IncrementVerificationAttempts(ctx, verif.ID)
-		if err != nil {
-			slog.Error("failed to increment attempts", "error", err)
+		if err := h.q.IncrementVerificationAttempts(ctx, verif.ID); err != nil {
+			slog.ErrorContext(ctx, "failed to increment otp attempts", slog.Any("error", err))
 		}
+		slog.WarnContext(ctx, "otp verification rejected",
+			slog.String("reason", "wrong code"),
+			slog.Int("attempts", int(verif.Attempts)+1),
+		)
 		response.BadRequest(w, "invalid code")
 		return
 	}
 
-	token, err := auth.GenerateToken()
+	token, err := h.issueSessionToken(ctx, verif.ID)
 	if err != nil {
 		response.InternalServerError(w, r, err)
 		return
 	}
 
-	tokenHash := auth.HashToken(token)
-	tokenExpiresAt := time.Now().Add(24 * 7 * time.Hour) // 7 days
+	slog.InfoContext(ctx, "otp verified")
 
-	_, err = h.q.MarkPhoneVerified(ctx, verif.ID, tokenHash, tokenExpiresAt)
-	if err != nil {
-		response.InternalServerError(w, r, err)
-		return
-	}
-
-	response.JSON(w, http.StatusOK, map[string]string{
-		"token": token,
-	})
+	response.JSONCtx(ctx, w, http.StatusOK, map[string]string{"token": token})
 }
 
 func (h *Auth) FirebaseLogin(w http.ResponseWriter, r *http.Request) {
@@ -177,18 +208,7 @@ func (h *Auth) FirebaseLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.cfg.FirebaseProjectID == "" {
-		response.InternalServerError(w, r, errors.New("FIREBASE_PROJECT_ID is not configured on the backend"))
-		return
-	}
-
-	app, err := firebase.NewApp(ctx, &firebase.Config{ProjectID: h.cfg.FirebaseProjectID}, option.WithoutAuthentication())
-	if err != nil {
-		response.InternalServerError(w, r, err)
-		return
-	}
-
-	authClient, err := app.Auth(ctx)
+	authClient, err := h.firebaseAuth(ctx)
 	if err != nil {
 		response.InternalServerError(w, r, err)
 		return
@@ -196,48 +216,88 @@ func (h *Auth) FirebaseLogin(w http.ResponseWriter, r *http.Request) {
 
 	token, err := authClient.VerifyIDToken(ctx, req.IDToken)
 	if err != nil {
-		slog.Error("firebase token verification failed", "error", err)
+		slog.WarnContext(ctx, "firebase token verification failed", slog.Any("error", err))
 		response.BadRequest(w, "invalid firebase token")
 		return
 	}
 
-	phoneVal, ok := token.Claims["phone_number"]
-	if !ok {
+	// The phone claim is only present when the user signed in with a phone
+	// number, which is the only flow this endpoint supports.
+	phone, ok := token.Claims["phone_number"].(string)
+	if !ok || phone == "" {
 		response.BadRequest(w, "firebase token does not contain a phone number")
 		return
 	}
-	phone := phoneVal.(string)
 
-	// Issue custom token
-	customToken, err := auth.GenerateToken()
-	if err != nil {
-		response.InternalServerError(w, r, err)
-		return
-	}
+	ctx = logging.With(ctx, logging.Phone("phone", phone))
+	r = r.WithContext(ctx)
 
-	tokenHash := auth.HashToken(customToken)
-	tokenExpiresAt := time.Now().Add(24 * 7 * time.Hour) // 7 days
-
-	// Save to DB to maintain existing session architecture
+	// Firebase has already proven ownership of the number, so the row is
+	// recorded as verified rather than carrying a real code.
 	verif, err := h.q.CreatePhoneVerification(ctx, db.CreatePhoneVerificationParams{
 		Phone:     phone,
 		CodeHash:  "FIREBASE_VERIFIED",
 		Channel:   "SMS",
-		ExpiresAt: time.Now().Add(10 * time.Minute),
+		ExpiresAt: time.Now().Add(h.otpTTL()),
 	})
 	if err != nil {
-		response.InternalServerError(w, r, err)
+		response.InternalServerError(w, r, fmt.Errorf("storing phone verification: %w", err))
 		return
 	}
 
-	_, err = h.q.MarkPhoneVerified(ctx, verif.ID, tokenHash, tokenExpiresAt)
+	sessionToken, err := h.issueSessionToken(ctx, verif.ID)
 	if err != nil {
 		response.InternalServerError(w, r, err)
 		return
 	}
 
-	response.JSON(w, http.StatusOK, map[string]string{
-		"token": customToken,
+	slog.InfoContext(ctx, "firebase login succeeded")
+
+	response.JSONCtx(ctx, w, http.StatusOK, map[string]string{
+		"token": sessionToken,
 		"phone": phone,
 	})
+}
+
+// issueSessionToken mints an opaque bearer token, stores only its hash against
+// the verification row, and returns the clear-text token to the caller.
+func (h *Auth) issueSessionToken(ctx context.Context, verificationID uuid.UUID) (string, error) {
+	token, err := auth.GenerateToken()
+	if err != nil {
+		return "", fmt.Errorf("generating session token: %w", err)
+	}
+
+	if _, err := h.q.MarkPhoneVerified(ctx, verificationID, auth.HashToken(token), time.Now().Add(h.verificationTTL())); err != nil {
+		return "", fmt.Errorf("marking phone verified: %w", err)
+	}
+
+	return token, nil
+}
+
+// firebaseAuth lazily builds the Firebase Auth client and reuses it. Failures
+// are not cached, so a transient startup problem can recover on a later call.
+func (h *Auth) firebaseAuth(ctx context.Context) (*fbauth.Client, error) {
+	h.fbMu.Lock()
+	defer h.fbMu.Unlock()
+
+	if h.fbAuth != nil {
+		return h.fbAuth, nil
+	}
+
+	if h.cfg.FirebaseProjectID == "" {
+		return nil, errors.New("FIREBASE_PROJECT_ID is not configured on the backend")
+	}
+
+	app, err := firebase.NewApp(ctx, &firebase.Config{ProjectID: h.cfg.FirebaseProjectID}, option.WithoutAuthentication())
+	if err != nil {
+		return nil, fmt.Errorf("initialising firebase app: %w", err)
+	}
+
+	client, err := app.Auth(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("initialising firebase auth client: %w", err)
+	}
+
+	h.fbAuth = client
+	return client, nil
 }

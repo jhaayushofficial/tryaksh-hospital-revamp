@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -16,96 +17,129 @@ import (
 	"github.com/tryaksh/clinic/backend/internal/config"
 	httpInternal "github.com/tryaksh/clinic/backend/internal/http"
 	"github.com/tryaksh/clinic/backend/internal/platform/cleanup"
+	"github.com/tryaksh/clinic/backend/internal/platform/logging"
 	"github.com/tryaksh/clinic/backend/internal/platform/notify"
 )
 
+const (
+	shutdownTimeout = 10 * time.Second
+	otpSweepEvery   = 1 * time.Hour
+)
+
 func main() {
-	cfg, err := config.Load()
-	if err != nil {
-		slog.Error("failed to load config", "error", err)
+	if err := run(); err != nil {
+		slog.Error("fatal", slog.Any("error", err))
 		os.Exit(1)
 	}
+}
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: cfg.LogLevelSlog(),
-	}))
+// run holds the whole lifecycle so that every path returns an error instead of
+// calling os.Exit, which would skip the deferred cleanup below.
+func run() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+
+	logger := logging.New(os.Stdout, cfg.LogLevelSlog(), cfg.LogFormat)
 	slog.SetDefault(logger)
 
 	logger.Info("tryaksh api starting",
-		"env", cfg.AppEnv,
-		"port", cfg.Port,
-		"base_url", cfg.BaseURL,
-		"database", cfg.RedactedDatabaseURL(),
-		"timezone", cfg.Timezone,
-		"slot_duration", cfg.SlotDurationMinutes,
-		"booking_window_days", cfg.BookingWindowDays,
-		"otp_channel", cfg.OTPChannel,
-		"clinic", cfg.ClinicName,
+		slog.String("env", cfg.AppEnv),
+		slog.Int("port", cfg.Port),
+		slog.String("base_url", cfg.BaseURL),
+		slog.String("database", cfg.RedactedDatabaseURL()),
+		slog.String("timezone", cfg.Timezone),
+		slog.Int("slot_duration", cfg.SlotDurationMinutes),
+		slog.Int("booking_window_days", cfg.BookingWindowDays),
+		slog.String("otp_channel", cfg.OTPChannel),
+		slog.String("log_level", cfg.LogLevel),
 	)
 
-	ctx := context.Background()
+	// Cancelled on the first shutdown signal, which stops background jobs.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
-		logger.Error("failed to connect to database", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("connecting to database: %w", err)
 	}
 	defer pool.Close()
 
 	if err := pool.Ping(ctx); err != nil {
-		logger.Error("database ping failed", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("pinging database: %w", err)
 	}
+	logger.Info("database connected")
 
-	// Start background cleanup routines
-	cleanup.StartOTPCleanup(pool, 1*time.Hour)
+	cleanup.StartOTPCleanup(ctx, pool, otpSweepEvery)
 
-	// Build the notifier based on the configured OTP channel.
-	var notifier notify.Notifier
-	switch strings.ToLower(cfg.OTPChannel) {
-	case "sms":
-		notifier, err = notify.NewMSG91Notifier(cfg.MSG91AuthKey, cfg.MSG91SenderID, cfg.MSG91DLTTemplateID)
-		if err != nil {
-			logger.Error("failed to initialise MSG91 SMS notifier", "error", err)
-			os.Exit(1)
-		}
-		logger.Info("OTP channel: SMS via MSG91")
-	case "console":
-		notifier = notify.NewConsoleNotifier()
-		logger.Info("OTP channel: console (mock — codes printed to stdout)")
-	default:
-		// Fallback to console for any unrecognised value (e.g. "whatsapp" not yet implemented).
-		logger.Warn("OTP channel not implemented, falling back to console", "channel", cfg.OTPChannel)
-		notifier = notify.NewConsoleNotifier()
+	notifier, err := buildNotifier(cfg, logger)
+	if err != nil {
+		return err
 	}
-
-	router := httpInternal.NewRouter(cfg, pool, logger, notifier)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
-		Handler: router,
+		Handler: httpInternal.NewRouter(cfg, pool, logger, notifier),
+		// Bound the time a stalled client can hold a connection open.
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
+	serverErr := make(chan error, 1)
 	go func() {
-		logger.Info("starting server", "port", cfg.Port)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Error("server error", "error", err)
-			os.Exit(1)
+		logger.Info("http server listening", slog.Int("port", cfg.Port))
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+			return
 		}
+		serverErr <- nil
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	select {
+	case err := <-serverErr:
+		if err != nil {
+			return fmt.Errorf("http server: %w", err)
+		}
+	case <-ctx.Done():
+		logger.Info("shutdown signal received", slog.Duration("grace_period", shutdownTimeout))
+	}
 
-	logger.Info("shutting down server...")
-
-	ctxShutdown, cancel := context.WithTimeout(ctx, 5*time.Second)
+	// Shut down with a fresh context: ctx is already cancelled by the signal,
+	// and Shutdown needs a live deadline to drain in-flight requests.
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
-	if err := srv.Shutdown(ctxShutdown); err != nil {
-		logger.Error("server shutdown failed", "error", err)
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("shutting down http server: %w", err)
 	}
 
 	logger.Info("server exited cleanly")
+	return nil
+}
+
+// buildNotifier picks the OTP delivery channel. An unrecognised channel is a
+// misconfiguration, not a reason to fail to boot — it degrades to console.
+func buildNotifier(cfg *config.Config, logger *slog.Logger) (notify.Notifier, error) {
+	switch strings.ToLower(cfg.OTPChannel) {
+	case "sms":
+		notifier, err := notify.NewMSG91Notifier(cfg.MSG91AuthKey, cfg.MSG91SenderID, cfg.MSG91DLTTemplateID)
+		if err != nil {
+			return nil, fmt.Errorf("initialising MSG91 SMS notifier: %w", err)
+		}
+		logger.Info("otp channel selected", slog.String("channel", "sms"), slog.String("provider", "msg91"))
+		return notifier, nil
+
+	case "console":
+		logger.Info("otp channel selected", slog.String("channel", "console"))
+		return notify.NewConsoleNotifier(), nil
+
+	default:
+		logger.Warn("otp channel not implemented, falling back to console",
+			slog.String("channel", cfg.OTPChannel),
+		)
+		return notify.NewConsoleNotifier(), nil
+	}
 }

@@ -3,6 +3,8 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -15,6 +17,15 @@ import (
 	"github.com/tryaksh/clinic/backend/internal/db"
 	"github.com/tryaksh/clinic/backend/internal/http/response"
 )
+
+// validAppointmentStatuses mirrors chk_appointment_status in the schema, so an
+// unknown status is a 400 rather than a constraint violation surfacing as 500.
+var validAppointmentStatuses = map[string]bool{
+	"BOOKED":    true,
+	"COMPLETED": true,
+	"CANCELLED": true,
+	"NO_SHOW":   true,
+}
 
 type AdminAppointments struct {
 	q   *db.Queries
@@ -103,7 +114,11 @@ func (h *AdminAppointments) ForceBook(w http.ResponseWriter, r *http.Request) {
 
 	endTime := startTime.Add(time.Duration(h.cfg.SlotDurationMinutes) * time.Minute)
 
-	ref := generateReference()
+	ref, err := generateReference()
+	if err != nil {
+		response.InternalServerError(w, r, err)
+		return
+	}
 
 	app, err := h.q.CreateAppointment(ctx, db.CreateAppointmentParams{
 		Reference:       ref,
@@ -123,15 +138,24 @@ func (h *AdminAppointments) ForceBook(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
 			response.Conflict(w, "This slot is already booked")
 			return
 		}
-		response.InternalServerError(w, r, err)
+		response.InternalServerError(w, r, fmt.Errorf("force-booking appointment: %w", err))
 		return
 	}
 
-	response.JSON(w, http.StatusCreated, app)
+	slog.InfoContext(ctx, "appointment force-booked by admin",
+		slog.String("reference", app.Reference),
+		slog.String("doctor_id", req.DoctorID.String()),
+		slog.String("clinic_id", req.ClinicID.String()),
+		slog.String("date", req.Date),
+		slog.String("start_time", req.Time),
+		slog.Bool("is_block", req.IsBlock),
+	)
+
+	response.JSONCtx(ctx, w, http.StatusCreated, app)
 }
 
 func (h *AdminAppointments) UpdateStatus(w http.ResponseWriter, r *http.Request) {
@@ -159,15 +183,26 @@ func (h *AdminAppointments) UpdateStatus(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if !validAppointmentStatuses[req.Status] {
+		response.BadRequest(w, "invalid status (must be BOOKED, COMPLETED, CANCELLED or NO_SHOW)")
+		return
+	}
+
 	app, err := h.q.UpdateAppointmentStatus(ctx, id, req.Status, req.CancelledBy, req.CancelledReason)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			response.NotFound(w, "appointment not found")
 			return
 		}
-		response.InternalServerError(w, r, err)
+		response.InternalServerError(w, r, fmt.Errorf("updating appointment status: %w", err))
 		return
 	}
 
-	response.JSON(w, http.StatusOK, app)
+	slog.InfoContext(ctx, "appointment status updated by admin",
+		slog.String("appointment_id", id.String()),
+		slog.String("reference", app.Reference),
+		slog.String("status", req.Status),
+	)
+
+	response.JSONCtx(ctx, w, http.StatusOK, app)
 }

@@ -1,17 +1,150 @@
 @import "tailwindcss";
 
+/*
+  Tryaksh Hospital design tokens.
+
+  The palette is the hospital's existing identity — navy, red, paper — extended
+  with the few semantic colours the booking flow actually needs. Red is
+  reserved for actions and errors; a slot that can be booked is jade, a slot
+  that is gone is stone. Colour therefore always means something here.
+
+  Three faces, three jobs: Lora sets headings, IBM Plex Sans sets prose, and
+  IBM Plex Mono sets data — times, dates and booking references — so that a
+  column of appointment times aligns and a reference can be read aloud
+  character by character without ambiguity. Devanagari is a first-class face,
+  not a fallback: the doctors' credentials are written in it.
+*/
 @theme {
-  --color-navy: #0B1B3F;
-  --color-navy-deep: #081430;
-  --color-red: #C81E22;
-  --color-red-deep: #9A1518;
-  --color-paper: #F5F4EF;
-  --font-lora: 'Lora', serif;
-  --font-ibm: 'IBM Plex Sans', sans-serif;
-  --font-devanagari: 'Noto Sans Devanagari', sans-serif;
+  --color-navy: #0b1b3f;
+  --color-navy-deep: #071229;
+  --color-navy-soft: #1c2c54;
+  --color-navy-mist: #8fa0c6;
+
+  --color-red: #c81e22;
+  --color-red-deep: #9a1518;
+  --color-red-tint: #fbeceb;
+
+  --color-jade: #16624b;
+  --color-jade-tint: #e7f1ec;
+
+  --color-paper: #f5f4ef;
+  --color-paper-sunk: #eceade;
+  --color-line: #e0ddd0;
+
+  --color-ink: #23231f;
+  --color-ink-soft: #55554d;
+  --color-ink-mute: #86857b;
+
+  --font-display: "Lora", Georgia, serif;
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-deva: "Noto Sans Devanagari", "IBM Plex Sans", sans-serif;
+
+  --radius-card: 14px;
+
+  --shadow-raise: 0 1px 2px rgb(11 27 63 / 0.06), 0 8px 24px -12px rgb(11 27 63 / 0.18);
+  --shadow-lift: 0 2px 4px rgb(11 27 63 / 0.08), 0 18px 40px -20px rgb(11 27 63 / 0.32);
 }
 
-body {
-  font-family: var(--font-ibm);
-  background-color: var(--color-paper);
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-feature-settings: "kern", "liga";
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    color: var(--color-navy);
+    letter-spacing: -0.01em;
+  }
+
+  /* One visible focus treatment everywhere, on light and dark surfaces. */
+  :focus-visible {
+    outline: 2px solid var(--color-red);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--color-navy);
+    color: #fff;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /*
+    An eyebrow states what a section is; the Devanagari half states the same
+    thing for the half of Darbhanga that reads it first. The pairing is the
+    page's structural signature, so it is defined once, here.
+  */
+  .eyebrow {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-ink-mute);
+  }
+
+  .eyebrow > .deva {
+    font-family: var(--font-deva);
+    letter-spacing: 0;
+    text-transform: none;
+    font-size: 0.8125rem;
+    color: var(--color-red-deep);
+  }
+
+  .rule {
+    height: 1px;
+    background: linear-gradient(90deg, var(--color-line), transparent);
+  }
+
+  /* Slot times and booking references are data: fixed width, slightly tracked. */
+  .tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+}
+
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Applied when a booking step mounts, so a step change reads as a step. */
+.animate-rise {
+  animation: riseIn 260ms cubic-bezier(0.22, 0.68, 0.36, 1) both;
 }
