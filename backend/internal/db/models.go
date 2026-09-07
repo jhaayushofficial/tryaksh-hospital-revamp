@@ -41,46 +41,53 @@ type DoctorClinic struct {
 }
 
 type Availability struct {
-	ID            uuid.UUID `json:"id"`
-	DoctorID      uuid.UUID `json:"doctor_id"`
-	ClinicID      uuid.UUID `json:"clinic_id"`
-	AvailableDate time.Time `json:"available_date"`
-	StartTime     time.Time `json:"start_time"`
-	EndTime       time.Time `json:"end_time"`
+	ID            uuid.UUID  `json:"id"`
+	DoctorID      uuid.UUID  `json:"doctor_id"`
+	ClinicID      uuid.UUID  `json:"clinic_id"`
+	AvailableDate time.Time  `json:"available_date"`
+	StartTime     time.Time  `json:"start_time"`
+	EndTime       time.Time  `json:"end_time"`
 	BreakStart    *time.Time `json:"break_start,omitempty"`
 	BreakEnd      *time.Time `json:"break_end,omitempty"`
-	IsOpen        bool      `json:"is_open"`
-	Note          *string   `json:"note,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	IsOpen        bool       `json:"is_open"`
+	Note          *string    `json:"note,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 type Appointment struct {
-	ID              uuid.UUID `json:"id"`
-	DoctorID        uuid.UUID `json:"doctor_id"`
-	ClinicID        uuid.UUID `json:"clinic_id"`
-	PatientName     string    `json:"patient_name"`
-	PatientPhone    string    `json:"patient_phone"`
-	AppointmentDate time.Time `json:"appointment_date"`
-	StartTime       time.Time `json:"start_time"`
-	EndTime         time.Time `json:"end_time"`
-	Status          string    `json:"status"` // BOOKED, COMPLETED, CANCELLED, NO_SHOW
-	ReferenceCode   string    `json:"reference_code"`
-	IdempotencyKey  *string   `json:"idempotency_key,omitempty"`
-	Notes           *string   `json:"notes,omitempty"`
-	RescheduledFrom *uuid.UUID `json:"rescheduled_from,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID              uuid.UUID  `json:"id"`
+	Reference       string     `json:"reference"`
+	DoctorID        uuid.UUID  `json:"doctor_id"`
+	ClinicID        uuid.UUID  `json:"clinic_id"`
+	AppointmentDate time.Time  `json:"appointment_date"`
+	StartTime       time.Time  `json:"start_time"`
+	EndTime         time.Time  `json:"end_time"`
+	PatientName     *string    `json:"patient_name"`
+	PatientPhone    *string    `json:"patient_phone"`
+	PatientEmail    *string    `json:"patient_email"`
+	PatientNote     *string    `json:"patient_note"`
+	IsBlock         bool       `json:"is_block"`
+	Status          string     `json:"status"`
+	CancelledBy     *string    `json:"cancelled_by"`
+	CancelledReason *string    `json:"cancelled_reason"`
+	RescheduledFrom *uuid.UUID `json:"rescheduled_from"`
+	IdempotencyKey  *string    `json:"idempotency_key"`
+	ActorDoctorID   *uuid.UUID `json:"actor_doctor_id"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 type PhoneVerification struct {
-	ID             uuid.UUID `json:"id"`
-	Phone          string    `json:"phone"`
-	CodeHash       string    `json:"code_hash"`
-	Attempts       int32     `json:"attempts"`
-	ExpiresAt      time.Time `json:"expires_at"`
+	ID             uuid.UUID  `json:"id"`
+	Phone          string     `json:"phone"`
+	CodeHash       string     `json:"code_hash"`
+	Channel        string     `json:"channel"`
+	Attempts       int32      `json:"attempts"`
+	ExpiresAt      time.Time  `json:"expires_at"`
 	VerifiedAt     *time.Time `json:"verified_at,omitempty"`
-	TokenHash      *string   `json:"token_hash,omitempty"`
+	TokenHash      *string    `json:"token_hash,omitempty"`
 	TokenExpiresAt *time.Time `json:"token_expires_at,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
+	Ip             *string    `json:"ip,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
 }

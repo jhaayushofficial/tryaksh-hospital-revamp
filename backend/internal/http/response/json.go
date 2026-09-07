@@ -57,3 +57,23 @@ func NotFound(w http.ResponseWriter, message string) {
 		},
 	})
 }
+
+// Conflict sends a 409 error.
+func Conflict(w http.ResponseWriter, message string) {
+	JSON(w, http.StatusConflict, JSONError{
+		Error: ErrorResponse{
+			Code:    "CONFLICT",
+			Message: message,
+		},
+	})
+}
+
+// Unauthorized sends a 401 error.
+func Unauthorized(w http.ResponseWriter, message string) {
+	JSON(w, http.StatusUnauthorized, JSONError{
+		Error: ErrorResponse{
+			Code:    "UNAUTHORIZED",
+			Message: message,
+		},
+	})
+}

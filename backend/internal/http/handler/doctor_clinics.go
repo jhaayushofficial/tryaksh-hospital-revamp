@@ -2,10 +2,12 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tryaksh/clinic/backend/internal/db"
 	"github.com/tryaksh/clinic/backend/internal/http/response"
@@ -38,6 +40,40 @@ func (h *DoctorClinics) Link(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusCreated, map[string]string{"status": "linked"})
 }
 
+func (h *DoctorClinics) Get(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	doctorIDStr := chi.URLParam(r, "doctor_id")
+	clinicIDStr := chi.URLParam(r, "clinic_id")
+
+	doctorID, err := uuid.Parse(doctorIDStr)
+	if err != nil {
+		response.BadRequest(w, "invalid doctor id")
+		return
+	}
+	clinicID, err := uuid.Parse(clinicIDStr)
+	if err != nil {
+		response.BadRequest(w, "invalid clinic id")
+		return
+	}
+
+	dc, err := h.q.GetDoctorClinic(ctx, doctorID, clinicID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Not an error, just means they aren't linked yet. Return empty/404.
+			response.NotFound(w, "doctor-clinic link not found")
+			return
+		}
+		response.InternalServerError(w, r, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]interface{}{
+		"doctor_id":     dc.DoctorID,
+		"clinic_id":     dc.ClinicID,
+		"default_hours": json.RawMessage(dc.DefaultHours),
+	})
+}
+
 func (h *DoctorClinics) UpdateHours(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	doctorIDStr := chi.URLParam(r, "doctor_id")
@@ -68,7 +104,7 @@ func (h *DoctorClinics) UpdateHours(w http.ResponseWriter, r *http.Request) {
 		DefaultHours: req.DefaultHours,
 	})
 	if err != nil {
-		if err.Error() == "no rows in result set" {
+		if errors.Is(err, pgx.ErrNoRows) {
 			response.NotFound(w, "doctor-clinic link not found")
 			return
 		}
@@ -76,7 +112,11 @@ func (h *DoctorClinics) UpdateHours(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response.JSON(w, http.StatusOK, dc)
+	response.JSON(w, http.StatusOK, map[string]interface{}{
+		"doctor_id":     dc.DoctorID,
+		"clinic_id":     dc.ClinicID,
+		"default_hours": json.RawMessage(dc.DefaultHours),
+	})
 }
 
 func (h *DoctorClinics) Unlink(w http.ResponseWriter, r *http.Request) {
